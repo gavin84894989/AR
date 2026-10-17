@@ -31,8 +31,13 @@
       width: 100% !important; height: 100% !important;
       z-index: 2 !important; pointer-events: auto;
     }
+
+    /* 隱藏但真實存在的視訊容器，確保手機硬體維持解碼 */
+    #video-pool {
+      position: absolute; top: 0; left: 0;
+      width: 1px; height: 1px; opacity: 0.01; pointer-events: none;
+    }
     
-    /* 螢幕頂部即時追蹤狀態指示 HUD */
     #tracker-hud {
       position: fixed; top: 15px; left: 50%; transform: translateX(-50%);
       z-index: 100; padding: 8px 16px; border-radius: 20px;
@@ -62,7 +67,6 @@
 </head>
 <body>
 
-  <!-- 即時追蹤提示燈 -->
   <div id="tracker-hud">🟡 正在尋找目標圖卡...</div>
 
   <div id="overlay">
@@ -72,12 +76,14 @@
   </div>
 
   <div id="ar-container"></div>
+  <div id="video-pool"></div>
 
   <script>
     const startBtn = document.getElementById('start-btn');
     const overlay = document.getElementById('overlay');
     const statusMsg = document.getElementById('status-msg');
     const hud = document.getElementById('tracker-hud');
+    const videoPool = document.getElementById('video-pool');
     let config = null;
 
     function checkInAppBrowser() {
@@ -131,8 +137,7 @@
 
     async function startAR() {
       startBtn.disabled = true;
-      startBtn.innerText = "相機啟動中，請稍候...";
-      statusMsg.innerText = "若跳出授權視窗，請點選「允許」";
+      startBtn.innerText = "啟動中，請稍候...";
 
       try {
         const container = document.querySelector("#ar-container");
@@ -150,14 +155,7 @@
 
         const anchor = mindarThree.addAnchor(0);
 
-        // 1. 【關鍵除錯輔助】：加入圖卡對位紅色框線 (1x1 平面)
-        const debugBox = new THREE.Mesh(
-          new THREE.PlaneGeometry(1, 1),
-          new THREE.MeshBasicMaterial({ color: 0xff0055, wireframe: true, wireframeLinewidth: 3 })
-        );
-        anchor.group.add(debugBox);
-
-        // 2. 監聽特徵辨識事件（即時回報）
+        // 追蹤狀態監聽
         anchor.onTargetFound = () => {
           hud.style.background = "rgba(40, 167, 69, 0.85)";
           hud.innerHTML = "🟢 目標已鎖定！";
@@ -167,7 +165,7 @@
           hud.innerHTML = "🟡 正在尋找目標圖卡...";
         };
 
-        // 3. 建立 3D 浮空說明看板
+        // 浮空說明看板
         const cvs = document.createElement('canvas');
         cvs.width = 1024; cvs.height = 256;
         const ctx = cvs.getContext('2d');
@@ -188,7 +186,7 @@
 
         const clickables = [bannerSprite];
 
-        // 4. WebGL 去背著色器
+        // WebGL 去背著色器
         const vShader = `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
         const fShader = `
           uniform sampler2D textureMap; uniform vec3 keyColor; uniform float similarity; uniform float smoothness; varying vec2 vUv;
@@ -200,31 +198,46 @@
           }
         `;
 
-        // 5. 載入 3 支影片
+        const activeTextures = [];
+
+        // 載入 3 支影片並確保在使用者手勢內啟動播放
         config.videos.forEach(vConfig => {
           const v = document.createElement('video');
           v.src = `${vConfig.url}?t=${Date.now()}`;
           v.loop = true;
+          v.muted = true;
           v.playsInline = true;
           v.setAttribute('playsinline', '');
           v.setAttribute('webkit-playsinline', '');
-          v.muted = true;
           v.crossOrigin = "anonymous";
+          
+          // 放入隱藏池，防止瀏覽器因未加入 DOM 而停止解碼
+          videoPool.appendChild(v);
+
+          // 手勢內立即觸發 play
           v.play().catch(e => console.warn("影片播放:", e));
+
+          const vTexture = new THREE.VideoTexture(v);
+          vTexture.minFilter = THREE.LinearFilter;
+          vTexture.magFilter = THREE.LinearFilter;
+          vTexture.format = THREE.RGBAFormat;
+          activeTextures.push(vTexture);
 
           const mat = new THREE.ShaderMaterial({
             uniforms: {
-              textureMap: { value: new THREE.VideoTexture(v) },
+              textureMap: { value: vTexture },
               keyColor: { value: new THREE.Color(vConfig.keyColor) },
               similarity: { value: vConfig.similarity },
               smoothness: { value: vConfig.smoothness }
             },
             vertexShader: vShader,
             fragmentShader: fShader,
-            transparent: true
+            transparent: true,
+            side: THREE.DoubleSide // 關鍵：雙面渲染，防止因角度旋轉造成背面剔除看不到
           });
 
-          const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.4), mat);
+          // 尺寸調整為 0.8 x 0.5
+          const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.5), mat);
           mesh.position.set(vConfig.px, vConfig.py, 0.05);
           mesh.rotation.y = THREE.MathUtils.degToRad(vConfig.ry);
           mesh.rotation.z = THREE.MathUtils.degToRad(vConfig.rz);
@@ -247,9 +260,13 @@
         }, 100);
 
         overlay.style.display = 'none';
-        hud.style.display = 'block'; // 顯示頂部狀態 HUD
+        hud.style.display = 'block';
 
+        // 動畫循環：持續確保紋理刷新
         renderer.setAnimationLoop(() => {
+          for (let i = 0; i < activeTextures.length; i++) {
+            if (activeTextures[i]) activeTextures[i].needsUpdate = true;
+          }
           renderer.render(scene, camera);
         });
 
@@ -269,7 +286,7 @@
         console.error(err);
         startBtn.style.display = 'none';
         statusMsg.className = "text-error";
-        statusMsg.innerText = `相機啟動失敗：\n${err.message}`;
+        statusMsg.innerText = `啟動失敗：\n${err.message}`;
       }
     }
 
