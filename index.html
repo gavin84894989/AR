@@ -2,12 +2,11 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
-  <title>AR 內容發布管理後台 (GitHub API 整合版)</title>
-  <!-- 核心依賴套件 -->
+  <title>AR 內容發布管理後台</title>
+  <!-- 核心函式庫 -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-  <!-- 同時載入 MindAR 編譯器與核心 -->
-  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  
   <style>
     body { margin: 0; display: flex; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; height: 100vh; overflow: hidden; background: #1a1a1a; }
     #preview-container { flex: 1; height: 100%; position: relative; }
@@ -76,7 +75,11 @@
     <div id="qrcode"></div>
   </div>
 
-  <script>
+  <!-- 以 ES Module 載入 MindAR Compiler 與完整業務邏輯 -->
+  <script type="module">
+    // 正確自官方 CDN 匯入 Compiler 類別
+    import { Compiler } from "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js";
+
     // ==========================================
     // 1. 初始化資料狀態
     // ==========================================
@@ -94,7 +97,6 @@
     let targetImageFile = null;
     const localVideoFiles = [null, null, null];
 
-    // 自動帶入先前記住的連線資訊
     document.getElementById('ghRepo').value = localStorage.getItem('ar_gh_repo') || '';
     document.getElementById('ghToken').value = localStorage.getItem('ar_gh_token') || '';
 
@@ -233,160 +235,3 @@
     document.getElementById('bannerText').addEventListener('input', (e) => {
       state.bannerText = e.target.value;
       bannerSprite.material.map = createBannerTexture(state.bannerText);
-    });
-    document.getElementById('bannerPosY').addEventListener('input', (e) => {
-      state.bannerPosY = parseFloat(e.target.value);
-      bannerSprite.position.y = state.bannerPosY;
-    });
-    document.getElementById('redirectUrl').addEventListener('input', (e) => {
-      state.redirectUrl = e.target.value;
-    });
-
-    function animate() { requestAnimationFrame(animate); renderer.render(scene, camera); }
-    animate();
-
-    // ==========================================
-    // 4. GitHub REST API 核心上傳管線 (含編譯器容錯建構)
-    // ==========================================
-    const publishBtn = document.getElementById('publish-btn');
-    const log = document.getElementById('status-log');
-
-    // 智能獲取 MindAR Compiler 建構函式
-    function getMindARCompiler() {
-      if (window.MINDAR && window.MINDAR.IMAGE && window.MINDAR.IMAGE.Compiler) {
-        return window.MINDAR.IMAGE.Compiler;
-      }
-      if (window.MINDAR && window.MINDAR.Compiler) {
-        return window.MINDAR.Compiler;
-      }
-      if (window.Compiler) {
-        return window.Compiler;
-      }
-      return null;
-    }
-
-    function arrayBufferToBase64(buffer) {
-      const bytes = new Uint8Array(buffer);
-      let binary = '';
-      const chunkSize = 0x8000;
-      for (let i = 0; i < bytes.length; i += chunkSize) {
-        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
-      }
-      return btoa(binary);
-    }
-
-    function fileToBase64(file) {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result.split(',')[1]);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-    }
-
-    async function uploadToGitHub(repo, branch, token, path, base64Content, commitMsg) {
-      const url = `https://api.github.com/repos/${repo}/contents/${path}`;
-      let sha = undefined;
-      try {
-        const getRes = await fetch(`${url}?ref=${branch}`, {
-          headers: { "Authorization": `token ${token}` }
-        });
-        if (getRes.ok) {
-          const fileData = await getRes.json();
-          sha = fileData.sha;
-        }
-      } catch (e) {}
-
-      const res = await fetch(url, {
-        method: "PUT",
-        headers: {
-          "Authorization": `token ${token}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          message: commitMsg,
-          content: base64Content,
-          branch: branch,
-          sha: sha
-        })
-      });
-
-      if (!res.ok) {
-        const errJson = await res.json();
-        throw new Error(errJson.message || "上傳失敗");
-      }
-      return true;
-    }
-
-    publishBtn.addEventListener('click', async () => {
-      const repo = document.getElementById('ghRepo').value.trim();
-      const branch = document.getElementById('ghBranch').value.trim() || 'main';
-      const token = document.getElementById('ghToken').value.trim();
-
-      if (!repo || !token) {
-        alert("請完整填寫 GitHub 儲存庫名稱與 Token！");
-        return;
-      }
-
-      localStorage.setItem('ar_gh_repo', repo);
-      localStorage.setItem('ar_gh_token', token);
-
-      publishBtn.disabled = true;
-
-      try {
-        // A. 若有選擇新圖卡，即時編譯 targets.mind
-        if (targetImageFile) {
-          const CompilerClass = getMindARCompiler();
-          if (!CompilerClass) {
-            throw new Error("無法載入 MindAR Compiler，請檢查網路連線或稍候重試！");
-          }
-
-          log.innerText = "⏳ 正在分析特徵並編譯 targets.mind...";
-          const img = new Image();
-          img.src = URL.createObjectURL(targetImageFile);
-          await new Promise(r => img.onload = r);
-
-          const compiler = new CompilerClass();
-          await compiler.compileImageTargets([img], p => {
-            log.innerText = `⏳ 編譯圖卡特徵: ${(p * 100).toFixed(0)}%`;
-          });
-          const mindBuffer = await compiler.exportData();
-
-          log.innerText = "⏳ 上傳 targets.mind 至 GitHub...";
-          await uploadToGitHub(repo, branch, token, "targets.mind", arrayBufferToBase64(mindBuffer), "自動更新 AR 特徵檔 targets.mind");
-        }
-
-        // B. 上傳選取之影片
-        for (let i = 0; i < 3; i++) {
-          if (localVideoFiles[i]) {
-            log.innerText = `⏳ 正在上傳影片 ${i + 1} 至 GitHub (videos/video_${i}.mp4)...`;
-            const vBase64 = await fileToBase64(localVideoFiles[i]);
-            await uploadToGitHub(repo, branch, token, `videos/video_${i}.mp4`, vBase64, `自動更新影片 ${i + 1}`);
-            state.videos[i].url = `./videos/video_${i}.mp4`;
-          }
-        }
-
-        // C. 上傳全域設定檔 config.json
-        log.innerText = "⏳ 正在同步更新 config.json...";
-        const configJsonString = JSON.stringify(state, null, 2);
-        const configBase64 = btoa(unescape(encodeURIComponent(configJsonString)));
-        await uploadToGitHub(repo, branch, token, "config.json", configBase64, "自動更新 AR 空間與去背參數 config.json");
-
-        log.innerText = "✅ 發布成功！已自動推送至 GitHub。";
-
-        // D. 產生 QR Code
-        const qrContainer = document.getElementById('qrcode');
-        qrContainer.innerHTML = "";
-        const viewerUrl = `${window.location.origin}${window.location.pathname.replace('index.html', '')}viewer.html`;
-        new QRCode(qrContainer, { text: viewerUrl, width: 150, height: 150 });
-
-      } catch (err) {
-        console.error(err);
-        log.innerText = `發布失敗: ${err.message}`;
-      } finally {
-        publishBtn.disabled = false;
-      }
-    });
-  </script>
-</body>
-</html>
