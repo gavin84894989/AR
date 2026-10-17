@@ -7,134 +7,188 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"></script>
   <style>
-    body { margin: 0; overflow: hidden; background: #000; }
-    #ar-container { width: 100vw; height: 100vh; }
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; font-family: -apple-system, sans-serif; }
+    
+    /* 關鍵排版修正：必須為 relative 且 overflow hidden，才能讓相機畫面填滿 */
+    #ar-container { 
+      position: relative; 
+      width: 100vw; 
+      height: 100vh; 
+      overflow: hidden; 
+    }
+    
     #overlay {
       position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0,0,0,0.85); display: flex; justify-content: center;
-      align-items: center; z-index: 999;
+      background: rgba(0, 0, 0, 0.85); display: flex; flex-direction: column;
+      justify-content: center; align-items: center; z-index: 999; color: white; text-align: center; padding: 20px; box-sizing: border-box;
     }
+    
     #start-btn {
       padding: 14px 28px; font-size: 18px; border: none; border-radius: 8px;
-      background: #007aff; color: white; cursor: pointer;
+      background: #007aff; color: white; cursor: pointer; font-weight: bold;
+    }
+
+    #error-msg {
+      margin-top: 15px; color: #ff4d4f; font-size: 14px; white-space: pre-wrap; line-height: 1.5;
     }
   </style>
 </head>
 <body>
 
   <div id="overlay">
-    <button id="start-btn">正在讀取設定檔...</button>
+    <h2 id="title">WebAR 互動體驗</h2>
+    <button id="start-btn">正在載入設定檔...</button>
+    <div id="error-msg"></div>
   </div>
+
   <div id="ar-container"></div>
 
   <script>
     const startBtn = document.getElementById('start-btn');
     const overlay = document.getElementById('overlay');
+    const errorMsg = document.getElementById('error-msg');
     let config = null;
 
-    // 1. 抓取最新 config.json (加入快取清除參數)
+    // 1. 檢查是否在 LINE 或 FB 內建瀏覽器中開啟
+    function checkInAppBrowser() {
+      const ua = navigator.userAgent || navigator.vendor || window.opera;
+      const isLine = ua.indexOf('Line') > -1;
+      const isFB = (ua.indexOf('FBAN') > -1) || (ua.indexOf('FBAV') > -1);
+      
+      if (isLine || isFB) {
+        startBtn.style.display = 'none';
+        errorMsg.innerHTML = "⚠️ <b>無法使用通訊軟體內建瀏覽器</b><br><br>請點擊右上角選單（三個點），選擇：<br>👉 <b>「以預設瀏覽器開啟」</b> 或 <b>「在 Safari / Chrome 中開啟」</b>。";
+        return true;
+      }
+      return false;
+    }
+
+    // 2. 抓取最新設定檔
     async function init() {
+      if (checkInAppBrowser()) return;
+
       try {
         const res = await fetch(`./config.json?t=${Date.now()}`);
-        if (!res.ok) throw new Error("尚未找到 config.json，請先由後台發布！");
+        if (!res.ok) throw new Error("找不到 config.json，請確認後台是否已成功發布！");
         config = await res.json();
-        startBtn.innerText = "點擊啟動 AR";
+        
+        startBtn.innerText = "點擊啟動 AR 鏡頭";
+        startBtn.disabled = false;
         startBtn.onclick = startAR;
       } catch (e) {
-        startBtn.innerText = e.message;
+        startBtn.style.display = 'none';
+        errorMsg.innerText = e.message;
       }
     }
 
+    // 3. 啟動 AR
     async function startAR() {
-      overlay.style.display = 'none';
+      startBtn.disabled = true;
+      startBtn.innerText = "相機啟動中，請稍候...";
+      errorMsg.innerText = "";
 
-      // 2. 初始化 MindAR (載入專案特徵檔 targets.mind)
-      const mindarThree = new window.MINDAR.IMAGE.MindARThree({
-        container: document.querySelector("#ar-container"),
-        imageTargetSrc: `./targets.mind?t=${Date.now()}`
-      });
-      const { renderer, scene, camera } = mindarThree;
-      const anchor = mindarThree.addAnchor(0);
-
-      // 3. 建立 3D 浮空說明看板
-      const cvs = document.createElement('canvas');
-      cvs.width = 1024; cvs.height = 256;
-      const ctx = cvs.getContext('2d');
-      ctx.fillStyle = "rgba(10, 10, 10, 0.85)";
-      ctx.beginPath();
-      ctx.roundRect(20, 20, 984, 216, 40);
-      ctx.fill();
-      ctx.lineWidth = 8; ctx.strokeStyle = "#007aff"; ctx.stroke();
-      ctx.font = "bold 52px sans-serif"; ctx.fillStyle = "#ffffff";
-      ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.fillText(config.bannerText, 512, 128);
-
-      const bannerSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cvs) }));
-      bannerSprite.scale.set(1.6, 0.4, 1);
-      bannerSprite.position.set(0, config.bannerPosY || 1.2, 0.1);
-      anchor.group.add(bannerSprite);
-
-      const clickables = [bannerSprite];
-
-      // 4. 定義去背著色器
-      const vShader = `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
-      const fShader = `
-        uniform sampler2D textureMap; uniform vec3 keyColor; uniform float similarity; uniform float smoothness; varying vec2 vUv;
-        void main() {
-          vec4 col = texture2D(textureMap, vUv);
-          float diff = length(col.rgb - keyColor);
-          float alpha = smoothstep(similarity, similarity + smoothness, diff);
-          gl_FragColor = vec4(col.rgb, col.a * alpha);
-        }
-      `;
-
-      // 5. 建立 3 支循環播放影片平面
-      config.videos.forEach(vConfig => {
-        const v = document.createElement('video');
-        v.src = `${vConfig.url}?t=${Date.now()}`;
-        v.loop = true;
-        v.playsInline = true;
-        v.crossOrigin = "anonymous";
-        v.play();
-
-        const mat = new THREE.ShaderMaterial({
-          uniforms: {
-            textureMap: { value: new THREE.VideoTexture(v) },
-            keyColor: { value: new THREE.Color(vConfig.keyColor) },
-            similarity: { value: vConfig.similarity },
-            smoothness: { value: vConfig.smoothness }
-          },
-          vertexShader: vShader,
-          fragmentShader: fShader,
-          transparent: true
+      try {
+        // 初始化 MindAR
+        const mindarThree = new window.MINDAR.IMAGE.MindARThree({
+          container: document.querySelector("#ar-container"),
+          imageTargetSrc: `./targets.mind?t=${Date.now()}`
         });
 
-        const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.4), mat);
-        mesh.position.set(vConfig.px, vConfig.py, 0.05);
-        mesh.rotation.y = THREE.MathUtils.degToRad(vConfig.ry);
-        mesh.rotation.z = THREE.MathUtils.degToRad(vConfig.rz);
+        const { renderer, scene, camera } = mindarThree;
+        const anchor = mindarThree.addAnchor(0);
 
-        anchor.group.add(mesh);
-        clickables.push(mesh);
-      });
+        // 建立 3D 浮空說明看板
+        const cvs = document.createElement('canvas');
+        cvs.width = 1024; cvs.height = 256;
+        const ctx = cvs.getContext('2d');
+        ctx.fillStyle = "rgba(10, 10, 10, 0.85)";
+        ctx.beginPath();
+        ctx.roundRect(20, 20, 984, 216, 40);
+        ctx.fill();
+        ctx.lineWidth = 8; ctx.strokeStyle = "#007aff"; ctx.stroke();
+        ctx.font = "bold 52px sans-serif"; ctx.fillStyle = "#ffffff";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(config.bannerText, 512, 128);
 
-      // 6. 啟動追蹤
-      await mindarThree.start();
-      renderer.setAnimationLoop(() => {
-        renderer.render(scene, camera);
-      });
+        const bannerSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cvs) }));
+        bannerSprite.scale.set(1.6, 0.4, 1);
+        bannerSprite.position.set(0, config.bannerPosY || 1.2, 0.1);
+        anchor.group.add(bannerSprite);
 
-      // 7. 光線投射 (Raycaster) 點擊跳轉判定
-      const raycaster = new THREE.Raycaster();
-      const mouse = new THREE.Vector2();
-      window.addEventListener('click', (e) => {
-        mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
-        mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
-        raycaster.setFromCamera(mouse, camera);
-        if (raycaster.intersectObjects(clickables).length > 0) {
-          window.location.href = config.redirectUrl;
-        }
-      });
+        const clickables = [bannerSprite];
+
+        // 定義 WebGL 即時去背著色器
+        const vShader = `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
+        const fShader = `
+          uniform sampler2D textureMap; uniform vec3 keyColor; uniform float similarity; uniform float smoothness; varying vec2 vUv;
+          void main() {
+            vec4 col = texture2D(textureMap, vUv);
+            float diff = length(col.rgb - keyColor);
+            float alpha = smoothstep(similarity, similarity + smoothness, diff);
+            gl_FragColor = vec4(col.rgb, col.a * alpha);
+          }
+        `;
+
+        // 載入 3 支影片
+        config.videos.forEach(vConfig => {
+          const v = document.createElement('video');
+          v.src = `${vConfig.url}?t=${Date.now()}`;
+          v.loop = true;
+          v.playsInline = true;
+          v.muted = true; // 關鍵修正：必須靜音啟動，手機瀏覽器才允許自動播放
+          v.crossOrigin = "anonymous";
+          
+          // 嘗試播放
+          v.play().catch(err => console.warn("影片播放受阻:", err));
+
+          const mat = new THREE.ShaderMaterial({
+            uniforms: {
+              textureMap: { value: new THREE.VideoTexture(v) },
+              keyColor: { value: new THREE.Color(vConfig.keyColor) },
+              similarity: { value: vConfig.similarity },
+              smoothness: { value: vConfig.smoothness }
+            },
+            vertexShader: vShader,
+            fragmentShader: fShader,
+            transparent: true
+          });
+
+          const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.4), mat);
+          mesh.position.set(vConfig.px, vConfig.py, 0.05);
+          mesh.rotation.y = THREE.MathUtils.degToRad(vConfig.ry);
+          mesh.rotation.z = THREE.MathUtils.degToRad(vConfig.rz);
+
+          anchor.group.add(mesh);
+          clickables.push(mesh);
+        });
+
+        // 啟動相機與追蹤引擎
+        await mindarThree.start();
+        
+        // 成功取得畫面後才關閉遮罩
+        overlay.style.display = 'none';
+
+        renderer.setAnimationLoop(() => {
+          renderer.render(scene, camera);
+        });
+
+        // 點擊判定跳轉
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        window.addEventListener('click', (e) => {
+          mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+          mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+          raycaster.setFromCamera(mouse, camera);
+          if (raycaster.intersectObjects(clickables).length > 0) {
+            window.location.href = config.redirectUrl;
+          }
+        });
+
+      } catch (err) {
+        console.error(err);
+        startBtn.style.display = 'none';
+        errorMsg.innerText = `相機啟動失敗：\n${err.message}\n\n請確認：\n1. 是否允許相機權限\n2. targets.mind 是否已成功發布`;
+      }
     }
 
     init();
