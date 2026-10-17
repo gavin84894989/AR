@@ -20,30 +20,13 @@
       width: 100vw; height: 100vh; overflow: hidden; 
     }
 
-    #ar-container video {
-      position: absolute !important; top: 0 !important; left: 0 !important;
-      width: 100% !important; height: 100% !important;
-      object-fit: cover !important; z-index: 1 !important;
-    }
-
-    #ar-container canvas {
-      position: absolute !important; top: 0 !important; left: 0 !important;
-      width: 100% !important; height: 100% !important;
-      z-index: 2 !important; pointer-events: auto;
-    }
-
-    /* 隱藏但真實存在的視訊容器，確保手機硬體維持解碼 */
-    #video-pool {
-      position: absolute; top: 0; left: 0;
-      width: 1px; height: 1px; opacity: 0.01; pointer-events: none;
-    }
-    
+    /* 頂部追蹤狀態指示 HUD */
     #tracker-hud {
       position: fixed; top: 15px; left: 50%; transform: translateX(-50%);
-      z-index: 100; padding: 8px 16px; border-radius: 20px;
+      z-index: 100; padding: 8px 18px; border-radius: 20px;
       font-size: 14px; font-weight: bold; color: white;
       background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(4px);
-      display: none; transition: background 0.3s;
+      display: none; transition: background 0.3s; pointer-events: none;
     }
     
     #overlay {
@@ -76,14 +59,12 @@
   </div>
 
   <div id="ar-container"></div>
-  <div id="video-pool"></div>
 
   <script>
     const startBtn = document.getElementById('start-btn');
     const overlay = document.getElementById('overlay');
     const statusMsg = document.getElementById('status-msg');
     const hud = document.getElementById('tracker-hud');
-    const videoPool = document.getElementById('video-pool');
     let config = null;
 
     function checkInAppBrowser() {
@@ -151,42 +132,47 @@
         });
 
         const { renderer, scene, camera } = mindarThree;
+        
+        // 確保畫布背景 100% 透明穿透相機
         renderer.setClearColor(0x000000, 0);
 
         const anchor = mindarThree.addAnchor(0);
+        const clickables = [];
 
-        // 追蹤狀態監聽
-        anchor.onTargetFound = () => {
-          hud.style.background = "rgba(40, 167, 69, 0.85)";
-          hud.innerHTML = "🟢 目標已鎖定！";
-        };
-        anchor.onTargetLost = () => {
-          hud.style.background = "rgba(0, 0, 0, 0.7)";
-          hud.innerHTML = "🟡 正在尋找目標圖卡...";
-        };
+        // 1. 【關鍵修復】：加入實體定位框 (1x1)，保證鎖定時立刻看見反應
+        const edgeGeometry = new THREE.EdgesGeometry(new THREE.PlaneGeometry(1, 1));
+        const edgeLine = new THREE.LineSegments(
+          edgeGeometry,
+          new THREE.LineBasicMaterial({ color: 0x00ffff, linewidth: 3 })
+        );
+        edgeLine.position.z = 0.01;
+        anchor.group.add(edgeLine);
 
-        // 浮空說明看板
+        // 2. 【關鍵修復】：浮空看板捨棄 Sprite，改用實體雙面 Mesh 平面
         const cvs = document.createElement('canvas');
         cvs.width = 1024; cvs.height = 256;
         const ctx = cvs.getContext('2d');
-        ctx.fillStyle = "rgba(10, 10, 10, 0.85)";
+        ctx.fillStyle = "rgba(15, 23, 42, 0.9)";
         ctx.beginPath();
-        if (ctx.roundRect) ctx.roundRect(20, 20, 984, 216, 40);
-        else ctx.rect(20, 20, 984, 216);
+        if (ctx.roundRect) ctx.roundRect(10, 10, 1004, 236, 32);
+        else ctx.rect(10, 10, 1004, 236);
         ctx.fill();
-        ctx.lineWidth = 8; ctx.strokeStyle = "#007aff"; ctx.stroke();
-        ctx.font = "bold 52px sans-serif"; ctx.fillStyle = "#ffffff";
+        ctx.lineWidth = 10; ctx.strokeStyle = "#007aff"; ctx.stroke();
+        ctx.font = "bold 50px sans-serif"; ctx.fillStyle = "#ffffff";
         ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.fillText(config.bannerText || "👉 點擊任意影片前往官方網站！", 512, 128);
+        ctx.fillText(config.bannerText || "👉 點擊前往官方網站！", 512, 128);
 
-        const bannerSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cvs) }));
-        bannerSprite.scale.set(1.6, 0.4, 1);
-        bannerSprite.position.set(0, config.bannerPosY || 1.2, 0.1);
-        anchor.group.add(bannerSprite);
+        const bannerTexture = new THREE.CanvasTexture(cvs);
+        const bannerMesh = new THREE.Mesh(
+          new THREE.PlaneGeometry(1.2, 0.3),
+          new THREE.MeshBasicMaterial({ map: bannerTexture, transparent: true, side: THREE.DoubleSide })
+        );
+        // 將看板放置在圖卡正上方 (Y = 0.65)，確保手機近距離也能看見
+        bannerMesh.position.set(0, 0.65, 0.05);
+        anchor.group.add(bannerMesh);
+        clickables.push(bannerMesh);
 
-        const clickables = [bannerSprite];
-
-        // WebGL 去背著色器
+        // 3. WebGL 去背著色器
         const vShader = `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
         const fShader = `
           uniform sampler2D textureMap; uniform vec3 keyColor; uniform float similarity; uniform float smoothness; varying vec2 vUv;
@@ -200,8 +186,8 @@
 
         const activeTextures = [];
 
-        // 載入 3 支影片並確保在使用者手勢內啟動播放
-        config.videos.forEach(vConfig => {
+        // 4. 載入 3 支影片與備援占位物件
+        config.videos.forEach((vConfig, idx) => {
           const v = document.createElement('video');
           v.src = `${vConfig.url}?t=${Date.now()}`;
           v.loop = true;
@@ -210,13 +196,18 @@
           v.setAttribute('playsinline', '');
           v.setAttribute('webkit-playsinline', '');
           v.crossOrigin = "anonymous";
-          
-          // 放入隱藏池，防止瀏覽器因未加入 DOM 而停止解碼
-          videoPool.appendChild(v);
 
-          // 手勢內立即觸發 play
-          v.play().catch(e => console.warn("影片播放:", e));
+          // 備援占位外框 (若影片載入失敗或正在載入時顯示)
+          const placeholder = new THREE.Mesh(
+            new THREE.PlaneGeometry(0.8, 0.5),
+            new THREE.MeshBasicMaterial({ color: 0x334155, wireframe: true, side: THREE.DoubleSide })
+          );
+          placeholder.position.set(vConfig.px, vConfig.py, 0.03);
+          placeholder.rotation.y = THREE.MathUtils.degToRad(vConfig.ry);
+          placeholder.rotation.z = THREE.MathUtils.degToRad(vConfig.rz);
+          anchor.group.add(placeholder);
 
+          // 影片紋理
           const vTexture = new THREE.VideoTexture(v);
           vTexture.minFilter = THREE.LinearFilter;
           vTexture.magFilter = THREE.LinearFilter;
@@ -233,10 +224,9 @@
             vertexShader: vShader,
             fragmentShader: fShader,
             transparent: true,
-            side: THREE.DoubleSide // 關鍵：雙面渲染，防止因角度旋轉造成背面剔除看不到
+            side: THREE.DoubleSide
           });
 
-          // 尺寸調整為 0.8 x 0.5
           const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.5), mat);
           mesh.position.set(vConfig.px, vConfig.py, 0.05);
           mesh.rotation.y = THREE.MathUtils.degToRad(vConfig.ry);
@@ -244,25 +234,27 @@
 
           anchor.group.add(mesh);
           clickables.push(mesh);
+
+          // 手勢內喚醒播放
+          v.play().catch(e => console.warn(`影片 ${idx + 1} 播放受阻:`, e));
         });
 
-        // 啟動 MindAR
-        await mindarThree.start();
+        // 5. 追蹤狀態事件
+        anchor.onTargetFound = () => {
+          hud.style.background = "rgba(40, 167, 69, 0.85)";
+          hud.innerHTML = "🟢 目標已鎖定！";
+        };
+        anchor.onTargetLost = () => {
+          hud.style.background = "rgba(0, 0, 0, 0.7)";
+          hud.innerHTML = "🟡 正在尋找目標圖卡...";
+        };
 
-        setTimeout(() => {
-          const camVideo = container.querySelector("video");
-          if (camVideo) {
-            camVideo.setAttribute("playsinline", "");
-            camVideo.setAttribute("webkit-playsinline", "");
-            camVideo.muted = true;
-            camVideo.play().catch(() => {});
-          }
-        }, 100);
+        // 6. 啟動 MindAR
+        await mindarThree.start();
 
         overlay.style.display = 'none';
         hud.style.display = 'block';
 
-        // 動畫循環：持續確保紋理刷新
         renderer.setAnimationLoop(() => {
           for (let i = 0; i < activeTextures.length; i++) {
             if (activeTextures[i]) activeTextures[i].needsUpdate = true;
