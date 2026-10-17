@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>AR 觀看端</title>
 
-  <!-- 經典穩定全域 UMD 函式庫 -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.1.5/dist/mindar-image-three.prod.js"></script>
 
@@ -17,34 +16,29 @@
     }
     
     #ar-container { 
-      position: absolute; 
-      top: 0; left: 0; 
-      width: 100vw; height: 100vh; 
-      overflow: hidden; 
+      position: absolute; top: 0; left: 0; 
+      width: 100vw; height: 100vh; overflow: hidden; 
     }
 
-    /* 強制底層鏡頭畫面鋪滿全螢幕並處於底層 */
     #ar-container video {
-      position: absolute !important;
-      top: 0 !important;
-      left: 0 !important;
-      width: 100% !important;
-      height: 100% !important;
-      object-fit: cover !important;
-      z-index: 1 !important;
-      opacity: 1 !important;
-      display: block !important;
+      position: absolute !important; top: 0 !important; left: 0 !important;
+      width: 100% !important; height: 100% !important;
+      object-fit: cover !important; z-index: 1 !important;
     }
 
-    /* 頂層 3D 渲染畫布，穿透接收底層鏡頭畫面 */
     #ar-container canvas {
-      position: absolute !important;
-      top: 0 !important;
-      left: 0 !important;
-      width: 100% !important;
-      height: 100% !important;
-      z-index: 2 !important;
-      pointer-events: auto;
+      position: absolute !important; top: 0 !important; left: 0 !important;
+      width: 100% !important; height: 100% !important;
+      z-index: 2 !important; pointer-events: auto;
+    }
+    
+    /* 螢幕頂部即時追蹤狀態指示 HUD */
+    #tracker-hud {
+      position: fixed; top: 15px; left: 50%; transform: translateX(-50%);
+      z-index: 100; padding: 8px 16px; border-radius: 20px;
+      font-size: 14px; font-weight: bold; color: white;
+      background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(4px);
+      display: none; transition: background 0.3s;
     }
     
     #overlay {
@@ -56,7 +50,6 @@
     #start-btn {
       padding: 15px 32px; font-size: 18px; border: none; border-radius: 8px;
       background: #007aff; color: white; cursor: pointer; font-weight: bold;
-      transition: background 0.2s;
     }
     #start-btn:disabled { background: #555; }
 
@@ -68,6 +61,9 @@
   </style>
 </head>
 <body>
+
+  <!-- 即時追蹤提示燈 -->
+  <div id="tracker-hud">🟡 正在尋找目標圖卡...</div>
 
   <div id="overlay">
     <h2>WebAR 互動體驗</h2>
@@ -81,6 +77,7 @@
     const startBtn = document.getElementById('start-btn');
     const overlay = document.getElementById('overlay');
     const statusMsg = document.getElementById('status-msg');
+    const hud = document.getElementById('tracker-hud');
     let config = null;
 
     function checkInAppBrowser() {
@@ -141,7 +138,6 @@
         const container = document.querySelector("#ar-container");
         const MindARThreeClass = getMindARThree();
 
-        // 1. 初始化 MindAR
         const mindarThree = new MindARThreeClass({
           container: container,
           imageTargetSrc: `./targets.mind?t=${Date.now()}`,
@@ -150,13 +146,28 @@
         });
 
         const { renderer, scene, camera } = mindarThree;
-
-        // 2. 徹底將 Three.js 背景設定為 100% 透明，防止黑色遮蔽
         renderer.setClearColor(0x000000, 0);
 
         const anchor = mindarThree.addAnchor(0);
 
-        // 浮空說明看板
+        // 1. 【關鍵除錯輔助】：加入圖卡對位紅色框線 (1x1 平面)
+        const debugBox = new THREE.Mesh(
+          new THREE.PlaneGeometry(1, 1),
+          new THREE.MeshBasicMaterial({ color: 0xff0055, wireframe: true, wireframeLinewidth: 3 })
+        );
+        anchor.group.add(debugBox);
+
+        // 2. 監聽特徵辨識事件（即時回報）
+        anchor.onTargetFound = () => {
+          hud.style.background = "rgba(40, 167, 69, 0.85)";
+          hud.innerHTML = "🟢 目標已鎖定！";
+        };
+        anchor.onTargetLost = () => {
+          hud.style.background = "rgba(0, 0, 0, 0.7)";
+          hud.innerHTML = "🟡 正在尋找目標圖卡...";
+        };
+
+        // 3. 建立 3D 浮空說明看板
         const cvs = document.createElement('canvas');
         cvs.width = 1024; cvs.height = 256;
         const ctx = cvs.getContext('2d');
@@ -177,7 +188,7 @@
 
         const clickables = [bannerSprite];
 
-        // WebGL 去背著色器
+        // 4. WebGL 去背著色器
         const vShader = `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
         const fShader = `
           uniform sampler2D textureMap; uniform vec3 keyColor; uniform float similarity; uniform float smoothness; varying vec2 vUv;
@@ -189,7 +200,7 @@
           }
         `;
 
-        // 載入 3 支影片
+        // 5. 載入 3 支影片
         config.videos.forEach(vConfig => {
           const v = document.createElement('video');
           v.src = `${vConfig.url}?t=${Date.now()}`;
@@ -222,22 +233,21 @@
           clickables.push(mesh);
         });
 
-        // 3. 啟動 MindAR
+        // 啟動 MindAR
         await mindarThree.start();
 
-        // 4. 強制喚醒鏡頭視訊標籤 (修復 iOS Safari 黑屏的核心關鍵)
         setTimeout(() => {
           const camVideo = container.querySelector("video");
           if (camVideo) {
             camVideo.setAttribute("playsinline", "");
             camVideo.setAttribute("webkit-playsinline", "");
             camVideo.muted = true;
-            camVideo.play().catch(err => console.log("Camera force play:", err));
+            camVideo.play().catch(() => {});
           }
         }, 100);
 
-        // 關閉黑色起始遮罩
         overlay.style.display = 'none';
+        hud.style.display = 'block'; // 顯示頂部狀態 HUD
 
         renderer.setAnimationLoop(() => {
           renderer.render(scene, camera);
