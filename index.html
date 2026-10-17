@@ -23,7 +23,7 @@
     #publish-btn { width: 100%; padding: 14px; background: #28a745; color: white; font-size: 16px; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; transition: background 0.2s; }
     #publish-btn:hover { background: #218838; }
     #publish-btn:disabled { background: #888; cursor: not-allowed; }
-    #status-log { font-size: 13px; color: #d9534f; margin-top: 10px; text-align: center; font-weight: bold; }
+    #status-log { font-size: 13px; color: #d9534f; margin-top: 10px; text-align: center; font-weight: bold; line-height: 1.5; white-space: pre-wrap; }
     #qrcode { display: flex; justify-content: center; margin-top: 15px; }
     .help-hint { position: absolute; bottom: 15px; left: 15px; color: #888; font-size: 12px; pointer-events: none; }
   </style>
@@ -36,15 +36,15 @@
     <div class="help-hint">灰色方框代表實體圖卡識別區，上方黑框為 AR 說明提示看板</div>
   </div>
 
-  <!-- 右側控制面板 (全部靜態寫入，開啟即見) -->
+  <!-- 右側控制面板 -->
   <div id="sidebar">
-    <h2>AR 發布管理後台 (GitHub API)</h2>
+    <h2>AR 發布管理後台</h2>
 
     <!-- GitHub 連線設定 -->
     <div class="card" style="background: #eef4ff; border-color: #b8daff;">
-      <h4>GitHub 連線設定 (免資料庫)</h4>
-      <label>儲存庫路徑 (格式: 帳號/倉庫名稱)</label>
-      <input type="text" id="ghRepo" placeholder="例如: your-name/AR" value="">
+      <h4>GitHub 連線設定</h4>
+      <label>儲存庫路徑 (可填 gavin184894889/AR 或完整網址)</label>
+      <input type="text" id="ghRepo" placeholder="gavin184894889/AR" value="gavin184894889/AR">
       <label>分支名稱 (預設 main)</label>
       <input type="text" id="ghBranch" value="main">
       <label>個人存取權杖 (Personal Access Token, ghp_...)</label>
@@ -69,7 +69,7 @@
       <input type="range" id="bannerPosY" min="0.5" max="2.5" step="0.05" value="1.2">
     </div>
 
-    <!-- 影片 1 控制卡片 -->
+    <!-- 影片 1 -->
     <div class="card video-card" data-idx="0">
       <h4>影片 1 (主/左)</h4>
       <label>選取新影片檔案 (MP4，不換則留空)</label>
@@ -89,7 +89,7 @@
       </div>
     </div>
 
-    <!-- 影片 2 控制卡片 -->
+    <!-- 影片 2 -->
     <div class="card video-card" data-idx="1">
       <h4>影片 2 (右/白底去背範例)</h4>
       <label>選取新影片檔案 (MP4，不換則留空)</label>
@@ -109,7 +109,7 @@
       </div>
     </div>
 
-    <!-- 影片 3 控制卡片 -->
+    <!-- 影片 3 -->
     <div class="card video-card" data-idx="2">
       <h4>影片 3 (頂部/懸空)</h4>
       <label>選取新影片檔案 (MP4，不換則留空)</label>
@@ -134,7 +134,6 @@
     <div id="qrcode"></div>
   </div>
 
-  <!-- 一般 JavaScript：負責所有介面與 3D 渲染，絕對保證畫面即時顯示 -->
   <script>
     // 1. 初始化資料狀態
     const state = {
@@ -151,7 +150,8 @@
     let targetImageFile = null;
     const localVideoFiles = [null, null, null];
 
-    document.getElementById('ghRepo').value = localStorage.getItem('ar_gh_repo') || '';
+    const savedRepo = localStorage.getItem('ar_gh_repo');
+    if (savedRepo) document.getElementById('ghRepo').value = savedRepo;
     document.getElementById('ghToken').value = localStorage.getItem('ar_gh_token') || '';
 
     // 2. Three.js 預覽場景建構
@@ -278,9 +278,18 @@
     function animate() { requestAnimationFrame(animate); renderer.render(scene, camera); }
     animate();
 
-    // 3. GitHub REST API 核心上傳流程
+    // 3. 核心工具函式
     const publishBtn = document.getElementById('publish-btn');
     const log = document.getElementById('status-log');
+
+    // 自動清理並解析儲存庫字串 (例如貼入 https://github.com/a/b 會自動轉為 a/b)
+    function sanitizeRepoString(input) {
+      let cleaned = input.trim();
+      cleaned = cleaned.replace(/^https?:\/\/github\.com\//i, '');
+      cleaned = cleaned.replace(/\.git$/i, '');
+      cleaned = cleaned.replace(/^\/+|\/+$/g, '');
+      return cleaned;
+    }
 
     function arrayBufferToBase64(buffer) {
       const bytes = new Uint8Array(buffer);
@@ -301,12 +310,53 @@
       });
     }
 
+    // GitHub 診斷與連線測試函式
+    async function testGitHubConnection(repo, branch, token) {
+      log.innerText = "🔍 正在驗證 GitHub Token 有效性...";
+      const userRes = await fetch("https://api.github.com/user", {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Accept": "application/vnd.github+json"
+        }
+      });
+      if (userRes.status === 401) {
+        throw new Error("【Token 錯誤】個人存取權杖 (Token) 無效或過期，請重新產出一組並確認為 Classic Token！");
+      }
+      const userData = await userRes.json();
+      console.log("GitHub 驗證身份:", userData.login);
+
+      log.innerText = `🔍 正在檢查倉庫 ${repo} 是否存在...`;
+      const repoRes = await fetch(`https://api.github.com/repos/${repo}`, {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Accept": "application/vnd.github+json"
+        }
+      });
+      if (repoRes.status === 404) {
+        throw new Error(`【倉庫不存在或無權限】找不到 ${repo}。\n請確認：\n1. 倉庫名稱是否完全相符\n2. Token 建立時是否有勾選 [repo] 權限方塊！`);
+      }
+
+      log.innerText = `🔍 正在檢查分支 [${branch}] 是否存在...`;
+      const branchRes = await fetch(`https://api.github.com/repos/${repo}/branches/${branch}`, {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Accept": "application/vnd.github+json"
+        }
+      });
+      if (branchRes.status === 404) {
+        throw new Error(`【分支錯誤】倉庫中找不到名為 [${branch}] 的分支！\n請回到 GitHub 確認預設分支是 main 還是 master。`);
+      }
+    }
+
     async function uploadToGitHub(repo, branch, token, path, base64Content, commitMsg) {
       const url = `https://api.github.com/repos/${repo}/contents/${path}`;
       let sha = undefined;
       try {
         const getRes = await fetch(`${url}?ref=${branch}`, {
-          headers: { "Authorization": `token ${token}` }
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Accept": "application/vnd.github+json"
+          }
         });
         if (getRes.ok) {
           const fileData = await getRes.json();
@@ -317,7 +367,8 @@
       const res = await fetch(url, {
         method: "PUT",
         headers: {
-          "Authorization": `token ${token}`,
+          "Authorization": `Bearer ${token}`,
+          "Accept": "application/vnd.github+json",
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
@@ -335,13 +386,15 @@
       return true;
     }
 
+    // 發布主流程
     publishBtn.addEventListener('click', async () => {
-      const repo = document.getElementById('ghRepo').value.trim();
+      const rawRepo = document.getElementById('ghRepo').value;
+      const repo = sanitizeRepoString(rawRepo);
       const branch = document.getElementById('ghBranch').value.trim() || 'main';
       const token = document.getElementById('ghToken').value.trim();
 
       if (!repo || !token) {
-        alert("請完整填寫 GitHub 儲存庫名稱與 Token！");
+        alert("請輸入儲存庫名稱與 Token！");
         return;
       }
 
@@ -351,7 +404,10 @@
       publishBtn.disabled = true;
 
       try {
-        // A. 若有選擇新圖卡，動態匯入 Compiler 進行編譯 (完全不卡住介面)
+        // 階段 0: 精準連線診斷
+        await testGitHubConnection(repo, branch, token);
+
+        // 階段 1: 若有選擇新圖卡，動態匯入 Compiler 進行編譯
         if (targetImageFile) {
           log.innerText = "⏳ 正在載入編譯模組...";
           const { Compiler } = await import("https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js");
@@ -371,7 +427,7 @@
           await uploadToGitHub(repo, branch, token, "targets.mind", arrayBufferToBase64(mindBuffer), "自動更新 AR 特徵檔 targets.mind");
         }
 
-        // B. 上傳選取之影片
+        // 階段 2: 上傳選取之影片
         for (let i = 0; i < 3; i++) {
           if (localVideoFiles[i]) {
             log.innerText = `⏳ 正在上傳影片 ${i + 1} 至 GitHub (videos/video_${i}.mp4)...`;
@@ -381,15 +437,15 @@
           }
         }
 
-        // C. 上傳全域設定檔 config.json
+        // 階段 3: 上傳全域設定檔 config.json
         log.innerText = "⏳ 正在同步更新 config.json...";
         const configJsonString = JSON.stringify(state, null, 2);
         const configBase64 = btoa(unescape(encodeURIComponent(configJsonString)));
         await uploadToGitHub(repo, branch, token, "config.json", configBase64, "自動更新 AR 空間與去背參數 config.json");
 
-        log.innerText = "✅ 發布成功！已自動推送至 GitHub。";
+        log.innerText = "✅ 發布成功！已成功同步至 GitHub 倉庫。";
 
-        // D. 產生 QR Code
+        // 階段 4: 產生專屬 QR Code
         const qrContainer = document.getElementById('qrcode');
         qrContainer.innerHTML = "";
         const viewerUrl = `${window.location.origin}${window.location.pathname.replace('index.html', '')}viewer.html`;
@@ -397,7 +453,7 @@
 
       } catch (err) {
         console.error(err);
-        log.innerText = `發布失敗: ${err.message}`;
+        log.innerText = `發布失敗:\n${err.message}`;
       } finally {
         publishBtn.disabled = false;
       }
