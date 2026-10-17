@@ -5,22 +5,22 @@
   "videos": [
     {
       "url": "./videos/video_0.mp4",
-      "keyColor": "#fcfcfc",
+      "keyColor": "#ffffff",
       "similarity": 0.05,
       "smoothness": 0,
-      "px": -0.6,
+      "px": -0.9,
       "py": 0,
-      "ry": -56,
+      "ry": -54,
       "rz": 0
     },
     {
       "url": "./videos/video_1.mp4",
       "keyColor": "#ffffff",
-      "similarity": 0.05,
-      "smoothness": 0,
-      "px": 0.86,
+      "similarity": 0.25,
+      "smoothness": 0.1,
+      "px": 0.6,
       "py": 0,
-      "ry": -76,
+      "ry": -15,
       "rz": 0
     },
     {
