@@ -30,11 +30,13 @@
 </head>
 <body>
 
+  <!-- 左側 3D 視圖 -->
   <div id="preview-container">
     <div id="preview"></div>
     <div class="help-hint">灰色方框代表實體圖卡識別區，上方黑框為 AR 說明提示看板</div>
   </div>
 
+  <!-- 右側控制面板 (全部靜態寫入，開啟即見) -->
   <div id="sidebar">
     <h2>AR 發布管理後台 (GitHub API)</h2>
 
@@ -67,22 +69,74 @@
       <input type="range" id="bannerPosY" min="0.5" max="2.5" step="0.05" value="1.2">
     </div>
 
-    <!-- 三支影片控制面板 -->
-    <div id="video-controllers"></div>
+    <!-- 影片 1 控制卡片 -->
+    <div class="card video-card" data-idx="0">
+      <h4>影片 1 (主/左)</h4>
+      <label>選取新影片檔案 (MP4，不換則留空)</label>
+      <input type="file" class="v-file" data-idx="0" accept="video/mp4">
+      <div class="row">
+        <div class="col"><label>去背色</label><input type="color" class="v-color" data-idx="0" value="#00ff00"></div>
+        <div class="col"><label>閥值</label><input type="range" class="v-sim" data-idx="0" min="0.05" max="0.9" step="0.01" value="0.45"></div>
+        <div class="col"><label>羽化</label><input type="range" class="v-smooth" data-idx="0" min="0.0" max="0.3" step="0.01" value="0.10"></div>
+      </div>
+      <div class="row">
+        <div class="col"><label>水平 X</label><input type="range" class="v-px" data-idx="0" min="-2" max="2" step="0.02" value="-0.6"></div>
+        <div class="col"><label>垂直 Y</label><input type="range" class="v-py" data-idx="0" min="-2" max="2" step="0.02" value="0"></div>
+      </div>
+      <div class="row">
+        <div class="col"><label>面向 Y</label><input type="range" class="v-ry" data-idx="0" min="-90" max="90" step="1" value="15"></div>
+        <div class="col"><label>傾斜 Z</label><input type="range" class="v-rz" data-idx="0" min="-180" max="180" step="1" value="0"></div>
+      </div>
+    </div>
+
+    <!-- 影片 2 控制卡片 -->
+    <div class="card video-card" data-idx="1">
+      <h4>影片 2 (右/白底去背範例)</h4>
+      <label>選取新影片檔案 (MP4，不換則留空)</label>
+      <input type="file" class="v-file" data-idx="1" accept="video/mp4">
+      <div class="row">
+        <div class="col"><label>去背色</label><input type="color" class="v-color" data-idx="1" value="#ffffff"></div>
+        <div class="col"><label>閥值</label><input type="range" class="v-sim" data-idx="1" min="0.05" max="0.9" step="0.01" value="0.25"></div>
+        <div class="col"><label>羽化</label><input type="range" class="v-smooth" data-idx="1" min="0.0" max="0.3" step="0.01" value="0.10"></div>
+      </div>
+      <div class="row">
+        <div class="col"><label>水平 X</label><input type="range" class="v-px" data-idx="1" min="-2" max="2" step="0.02" value="0.6"></div>
+        <div class="col"><label>垂直 Y</label><input type="range" class="v-py" data-idx="1" min="-2" max="2" step="0.02" value="0"></div>
+      </div>
+      <div class="row">
+        <div class="col"><label>面向 Y</label><input type="range" class="v-ry" data-idx="1" min="-90" max="90" step="1" value="-15"></div>
+        <div class="col"><label>傾斜 Z</label><input type="range" class="v-rz" data-idx="1" min="-180" max="180" step="1" value="0"></div>
+      </div>
+    </div>
+
+    <!-- 影片 3 控制卡片 -->
+    <div class="card video-card" data-idx="2">
+      <h4>影片 3 (頂部/懸空)</h4>
+      <label>選取新影片檔案 (MP4，不換則留空)</label>
+      <input type="file" class="v-file" data-idx="2" accept="video/mp4">
+      <div class="row">
+        <div class="col"><label>去背色</label><input type="color" class="v-color" data-idx="2" value="#00ff00"></div>
+        <div class="col"><label>閥值</label><input type="range" class="v-sim" data-idx="2" min="0.05" max="0.9" step="0.01" value="0.45"></div>
+        <div class="col"><label>羽化</label><input type="range" class="v-smooth" data-idx="2" min="0.0" max="0.3" step="0.01" value="0.10"></div>
+      </div>
+      <div class="row">
+        <div class="col"><label>水平 X</label><input type="range" class="v-px" data-idx="2" min="-2" max="2" step="0.02" value="0"></div>
+        <div class="col"><label>垂直 Y</label><input type="range" class="v-py" data-idx="2" min="-2" max="2" step="0.02" value="0.75"></div>
+      </div>
+      <div class="row">
+        <div class="col"><label>面向 Y</label><input type="range" class="v-ry" data-idx="2" min="-90" max="90" step="1" value="0"></div>
+        <div class="col"><label>傾斜 Z</label><input type="range" class="v-rz" data-idx="2" min="-180" max="180" step="1" value="0"></div>
+      </div>
+    </div>
 
     <button id="publish-btn">一鍵發布至 GitHub</button>
     <div id="status-log"></div>
     <div id="qrcode"></div>
   </div>
 
-  <!-- 以 ES Module 載入 MindAR Compiler 與完整業務邏輯 -->
-  <script type="module">
-    // 正確自官方 CDN 匯入 Compiler 類別
-    import { Compiler } from "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js";
-
-    // ==========================================
+  <!-- 一般 JavaScript：負責所有介面與 3D 渲染，絕對保證畫面即時顯示 -->
+  <script>
     // 1. 初始化資料狀態
-    // ==========================================
     const state = {
       redirectUrl: "https://example.com",
       bannerText: "👉 點擊任意影片前往官方網站！",
@@ -100,36 +154,7 @@
     document.getElementById('ghRepo').value = localStorage.getItem('ar_gh_repo') || '';
     document.getElementById('ghToken').value = localStorage.getItem('ar_gh_token') || '';
 
-    // ==========================================
-    // 2. 動態產生 3 支影片控制介面
-    // ==========================================
-    const ctrlBox = document.getElementById('video-controllers');
-    for (let i = 0; i < 3; i++) {
-      ctrlBox.innerHTML += `
-        <div class="card">
-          <h4>影片 ${i + 1}</h4>
-          <label>選取新影片檔案 (MP4，不換則留空)</label>
-          <input type="file" class="v-file" data-idx="${i}" accept="video/mp4">
-          <div class="row">
-            <div class="col"><label>去背色</label><input type="color" class="v-color" data-idx="${i}" value="${state.videos[i].keyColor}"></div>
-            <div class="col"><label>閥值</label><input type="range" class="v-sim" data-idx="${i}" min="0.05" max="0.9" step="0.01" value="${state.videos[i].similarity}"></div>
-            <div class="col"><label>羽化</label><input type="range" class="v-smooth" data-idx="${i}" min="0.0" max="0.3" step="0.01" value="${state.videos[i].smoothness}"></div>
-          </div>
-          <div class="row">
-            <div class="col"><label>水平 X</label><input type="range" class="v-px" data-idx="${i}" min="-2" max="2" step="0.02" value="${state.videos[i].px}"></div>
-            <div class="col"><label>垂直 Y</label><input type="range" class="v-py" data-idx="${i}" min="-2" max="2" step="0.02" value="${state.videos[i].py}"></div>
-          </div>
-          <div class="row">
-            <div class="col"><label>面向 Y</label><input type="range" class="v-ry" data-idx="${i}" min="-90" max="90" step="1" value="${state.videos[i].ry}"></div>
-            <div class="col"><label>傾斜 Z</label><input type="range" class="v-rz" data-idx="${i}" min="-180" max="180" step="1" value="${state.videos[i].rz}"></div>
-          </div>
-        </div>
-      `;
-    }
-
-    // ==========================================
-    // 3. Three.js 預覽場景
-    // ==========================================
+    // 2. Three.js 預覽場景建構
     const container = document.getElementById('preview');
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(45, (window.innerWidth - 450) / window.innerHeight, 0.1, 100);
@@ -197,6 +222,7 @@
       meshes.push(mesh);
     }
 
+    // 事件綁定
     document.getElementById('targetImgInput').addEventListener('change', e => targetImageFile = e.target.files[0]);
 
     document.querySelectorAll('.v-file').forEach(input => {
@@ -210,10 +236,9 @@
       });
     });
 
-    document.querySelectorAll('.card').forEach(card => {
+    document.querySelectorAll('.video-card').forEach(card => {
       card.addEventListener('input', (e) => {
-        const i = parseInt(e.target.dataset.idx);
-        if (isNaN(i)) return;
+        const i = parseInt(card.dataset.idx);
         const v = state.videos[i];
         if (e.target.classList.contains('v-color')) v.keyColor = e.target.value;
         if (e.target.classList.contains('v-sim')) v.similarity = parseFloat(e.target.value);
@@ -235,3 +260,148 @@
     document.getElementById('bannerText').addEventListener('input', (e) => {
       state.bannerText = e.target.value;
       bannerSprite.material.map = createBannerTexture(state.bannerText);
+    });
+    document.getElementById('bannerPosY').addEventListener('input', (e) => {
+      state.bannerPosY = parseFloat(e.target.value);
+      bannerSprite.position.y = state.bannerPosY;
+    });
+    document.getElementById('redirectUrl').addEventListener('input', (e) => {
+      state.redirectUrl = e.target.value;
+    });
+
+    window.addEventListener('resize', () => {
+      camera.aspect = (window.innerWidth - 450) / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth - 450, window.innerHeight);
+    });
+
+    function animate() { requestAnimationFrame(animate); renderer.render(scene, camera); }
+    animate();
+
+    // 3. GitHub REST API 核心上傳流程
+    const publishBtn = document.getElementById('publish-btn');
+    const log = document.getElementById('status-log');
+
+    function arrayBufferToBase64(buffer) {
+      const bytes = new Uint8Array(buffer);
+      let binary = '';
+      const chunkSize = 0x8000;
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+      }
+      return btoa(binary);
+    }
+
+    function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function uploadToGitHub(repo, branch, token, path, base64Content, commitMsg) {
+      const url = `https://api.github.com/repos/${repo}/contents/${path}`;
+      let sha = undefined;
+      try {
+        const getRes = await fetch(`${url}?ref=${branch}`, {
+          headers: { "Authorization": `token ${token}` }
+        });
+        if (getRes.ok) {
+          const fileData = await getRes.json();
+          sha = fileData.sha;
+        }
+      } catch (e) {}
+
+      const res = await fetch(url, {
+        method: "PUT",
+        headers: {
+          "Authorization": `token ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          message: commitMsg,
+          content: base64Content,
+          branch: branch,
+          sha: sha
+        })
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json();
+        throw new Error(errJson.message || "上傳失敗");
+      }
+      return true;
+    }
+
+    publishBtn.addEventListener('click', async () => {
+      const repo = document.getElementById('ghRepo').value.trim();
+      const branch = document.getElementById('ghBranch').value.trim() || 'main';
+      const token = document.getElementById('ghToken').value.trim();
+
+      if (!repo || !token) {
+        alert("請完整填寫 GitHub 儲存庫名稱與 Token！");
+        return;
+      }
+
+      localStorage.setItem('ar_gh_repo', repo);
+      localStorage.setItem('ar_gh_token', token);
+
+      publishBtn.disabled = true;
+
+      try {
+        // A. 若有選擇新圖卡，動態匯入 Compiler 進行編譯 (完全不卡住介面)
+        if (targetImageFile) {
+          log.innerText = "⏳ 正在載入編譯模組...";
+          const { Compiler } = await import("https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js");
+
+          log.innerText = "⏳ 正在分析特徵並編譯 targets.mind...";
+          const img = new Image();
+          img.src = URL.createObjectURL(targetImageFile);
+          await new Promise(r => img.onload = r);
+
+          const compiler = new Compiler();
+          await compiler.compileImageTargets([img], p => {
+            log.innerText = `⏳ 編譯圖卡特徵: ${(p * 100).toFixed(0)}%`;
+          });
+          const mindBuffer = await compiler.exportData();
+
+          log.innerText = "⏳ 上傳 targets.mind 至 GitHub...";
+          await uploadToGitHub(repo, branch, token, "targets.mind", arrayBufferToBase64(mindBuffer), "自動更新 AR 特徵檔 targets.mind");
+        }
+
+        // B. 上傳選取之影片
+        for (let i = 0; i < 3; i++) {
+          if (localVideoFiles[i]) {
+            log.innerText = `⏳ 正在上傳影片 ${i + 1} 至 GitHub (videos/video_${i}.mp4)...`;
+            const vBase64 = await fileToBase64(localVideoFiles[i]);
+            await uploadToGitHub(repo, branch, token, `videos/video_${i}.mp4`, vBase64, `自動更新影片 ${i + 1}`);
+            state.videos[i].url = `./videos/video_${i}.mp4`;
+          }
+        }
+
+        // C. 上傳全域設定檔 config.json
+        log.innerText = "⏳ 正在同步更新 config.json...";
+        const configJsonString = JSON.stringify(state, null, 2);
+        const configBase64 = btoa(unescape(encodeURIComponent(configJsonString)));
+        await uploadToGitHub(repo, branch, token, "config.json", configBase64, "自動更新 AR 空間與去背參數 config.json");
+
+        log.innerText = "✅ 發布成功！已自動推送至 GitHub。";
+
+        // D. 產生 QR Code
+        const qrContainer = document.getElementById('qrcode');
+        qrContainer.innerHTML = "";
+        const viewerUrl = `${window.location.origin}${window.location.pathname.replace('index.html', '')}viewer.html`;
+        new QRCode(qrContainer, { text: viewerUrl, width: 150, height: 150 });
+
+      } catch (err) {
+        console.error(err);
+        log.innerText = `發布失敗: ${err.message}`;
+      } finally {
+        publishBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
