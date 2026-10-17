@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <title>AR 內容發布管理後台 (GitHub API 整合版)</title>
+  <!-- 核心依賴套件 -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <!-- 同時載入 MindAR 編譯器與核心 -->
   <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <style>
@@ -92,12 +94,12 @@
     let targetImageFile = null;
     const localVideoFiles = [null, null, null];
 
-    // 自動讀取上次儲存的 GitHub 連線資訊
+    // 自動帶入先前記住的連線資訊
     document.getElementById('ghRepo').value = localStorage.getItem('ar_gh_repo') || '';
     document.getElementById('ghToken').value = localStorage.getItem('ar_gh_token') || '';
 
     // ==========================================
-    // 2. 動態產生 3 支影片的設定介面
+    // 2. 動態產生 3 支影片控制介面
     // ==========================================
     const ctrlBox = document.getElementById('video-controllers');
     for (let i = 0; i < 3; i++) {
@@ -124,7 +126,7 @@
     }
 
     // ==========================================
-    // 3. Three.js 預覽畫布建構
+    // 3. Three.js 預覽場景
     // ==========================================
     const container = document.getElementById('preview');
     const scene = new THREE.Scene();
@@ -137,7 +139,6 @@
 
     scene.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0x555555, wireframe: true })));
 
-    // 建立說明看板
     let bannerSprite = null;
     function createBannerTexture(text) {
       const cvs = document.createElement('canvas');
@@ -158,7 +159,6 @@
     bannerSprite.position.set(0, state.bannerPosY, 0.1);
     scene.add(bannerSprite);
 
-    // 建立 3 支影片平面
     const vShader = `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
     const fShader = `
       uniform sampler2D textureMap; uniform vec3 keyColor; uniform float similarity; uniform float smoothness; varying vec2 vUv;
@@ -195,7 +195,6 @@
       meshes.push(mesh);
     }
 
-    // 事件監聽
     document.getElementById('targetImgInput').addEventListener('change', e => targetImageFile = e.target.files[0]);
 
     document.querySelectorAll('.v-file').forEach(input => {
@@ -247,10 +246,24 @@
     animate();
 
     // ==========================================
-    // 4. GitHub REST API 核心上傳管線
+    // 4. GitHub REST API 核心上傳管線 (含編譯器容錯建構)
     // ==========================================
     const publishBtn = document.getElementById('publish-btn');
     const log = document.getElementById('status-log');
+
+    // 智能獲取 MindAR Compiler 建構函式
+    function getMindARCompiler() {
+      if (window.MINDAR && window.MINDAR.IMAGE && window.MINDAR.IMAGE.Compiler) {
+        return window.MINDAR.IMAGE.Compiler;
+      }
+      if (window.MINDAR && window.MINDAR.Compiler) {
+        return window.MINDAR.Compiler;
+      }
+      if (window.Compiler) {
+        return window.Compiler;
+      }
+      return null;
+    }
 
     function arrayBufferToBase64(buffer) {
       const bytes = new Uint8Array(buffer);
@@ -321,14 +334,19 @@
       publishBtn.disabled = true;
 
       try {
-        // A. 若有新圖片，在前端直接編譯並上傳 targets.mind
+        // A. 若有選擇新圖卡，即時編譯 targets.mind
         if (targetImageFile) {
-          log.innerText = "⏳ 正在本機分析特徵並編譯 targets.mind...";
+          const CompilerClass = getMindARCompiler();
+          if (!CompilerClass) {
+            throw new Error("無法載入 MindAR Compiler，請檢查網路連線或稍候重試！");
+          }
+
+          log.innerText = "⏳ 正在分析特徵並編譯 targets.mind...";
           const img = new Image();
           img.src = URL.createObjectURL(targetImageFile);
           await new Promise(r => img.onload = r);
 
-          const compiler = new window.MINDAR.IMAGE.Compiler();
+          const compiler = new CompilerClass();
           await compiler.compileImageTargets([img], p => {
             log.innerText = `⏳ 編譯圖卡特徵: ${(p * 100).toFixed(0)}%`;
           });
@@ -338,7 +356,7 @@
           await uploadToGitHub(repo, branch, token, "targets.mind", arrayBufferToBase64(mindBuffer), "自動更新 AR 特徵檔 targets.mind");
         }
 
-        // B. 上傳有選取的影片檔案
+        // B. 上傳選取之影片
         for (let i = 0; i < 3; i++) {
           if (localVideoFiles[i]) {
             log.innerText = `⏳ 正在上傳影片 ${i + 1} 至 GitHub (videos/video_${i}.mp4)...`;
@@ -348,15 +366,15 @@
           }
         }
 
-        // C. 上傳專案全域設定檔 config.json
+        // C. 上傳全域設定檔 config.json
         log.innerText = "⏳ 正在同步更新 config.json...";
         const configJsonString = JSON.stringify(state, null, 2);
         const configBase64 = btoa(unescape(encodeURIComponent(configJsonString)));
         await uploadToGitHub(repo, branch, token, "config.json", configBase64, "自動更新 AR 空間與去背參數 config.json");
 
-        log.innerText = "發布成功！已同步至 GitHub Pages。";
+        log.innerText = "✅ 發布成功！已自動推送至 GitHub。";
 
-        // D. 產生專屬 QR Code (指向同網域下的 viewer.html)
+        // D. 產生 QR Code
         const qrContainer = document.getElementById('qrcode');
         qrContainer.innerHTML = "";
         const viewerUrl = `${window.location.origin}${window.location.pathname.replace('index.html', '')}viewer.html`;
