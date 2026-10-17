@@ -5,15 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>AR 觀看端</title>
 
-  <!-- 1. 官方標準 importmap 模組映射設定 -->
-  <script type="importmap">
-  {
-    "imports": {
-      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-      "mindar-image-three": "https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-three.prod.js"
-    }
-  }
-  </script>
+  <!-- 載入相容性最高、免 importmap 的經典穩定 UMD 版本 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.1.5/dist/mindar-image-three.prod.js"></script>
 
   <style>
     html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -34,71 +28,106 @@
     #start-btn {
       padding: 14px 28px; font-size: 18px; border: none; border-radius: 8px;
       background: #007aff; color: white; cursor: pointer; font-weight: bold;
+      transition: background 0.2s;
     }
+    #start-btn:disabled { background: #555; cursor: not-allowed; }
 
-    #error-msg {
-      margin-top: 15px; color: #ff4d4f; font-size: 14px; white-space: pre-wrap; line-height: 1.5;
+    #status-msg {
+      margin-top: 15px; font-size: 14px; line-height: 1.5; white-space: pre-wrap; max-width: 90%;
     }
+    .text-error { color: #ff4d4f; font-weight: bold; }
+    .text-info { color: #aaa; }
   </style>
 </head>
 <body>
 
   <div id="overlay">
     <h2>WebAR 互動體驗</h2>
-    <button id="start-btn">正在載入設定檔...</button>
-    <div id="error-msg"></div>
+    <button id="start-btn" disabled>連線中...</button>
+    <div id="status-msg" class="text-info">正在檢查連線環境...</div>
   </div>
 
   <div id="ar-container"></div>
 
-  <!-- 2. 改以 ES Module 運行核心邏輯 -->
-  <script type="module">
-    import * as THREE from 'three';
-    import { MindARThree } from 'mindar-image-three';
-
+  <!-- 使用標準 JavaScript，所有手機皆可零時差執行 -->
+  <script>
     const startBtn = document.getElementById('start-btn');
     const overlay = document.getElementById('overlay');
-    const errorMsg = document.getElementById('error-msg');
+    const statusMsg = document.getElementById('status-msg');
     let config = null;
 
-    // 檢查通訊軟體內建瀏覽器
+    // 1. 檢查是否在通訊軟體內建瀏覽器 (LINE / FB)
     function checkInAppBrowser() {
       const ua = navigator.userAgent || navigator.vendor || window.opera;
       if (ua.indexOf('Line') > -1 || ua.indexOf('FBAN') > -1 || ua.indexOf('FBAV') > -1) {
         startBtn.style.display = 'none';
-        errorMsg.innerHTML = "⚠️ <b>無法在通訊軟體中開啟</b><br><br>請點選右上角選單：<br>👉 選擇<b>「以 Safari / Chrome 開啟」</b>。";
+        statusMsg.className = 'text-error';
+        statusMsg.innerHTML = "⚠️ <b>無法在通訊軟體內建瀏覽器中開啟</b><br><br>請點選右上角選單：<br>👉 選擇<b>「以 Safari / Chrome 開啟」</b>。";
         return true;
       }
       return false;
     }
 
-    // 讀取設定檔
+    // 2. 獲取 MindAR 物件
+    function getMindARThree() {
+      if (window.MINDAR && window.MINDAR.IMAGE && window.MINDAR.IMAGE.MindARThree) {
+        return window.MINDAR.IMAGE.MindARThree;
+      }
+      if (window.MindARThree) {
+        return window.MindARThree;
+      }
+      return null;
+    }
+
+    // 3. 讀取設定檔
     async function init() {
       if (checkInAppBrowser()) return;
 
+      statusMsg.className = 'text-info';
+      statusMsg.innerText = "⏳ 正在讀取 config.json 設定檔...";
+
       try {
         const res = await fetch(`./config.json?t=${Date.now()}`);
-        if (!res.ok) throw new Error("找不到 config.json，請先至後台完成一次發布！");
+        if (!res.ok) {
+          throw new Error(`找不到 config.json (HTTP ${res.status})\n請確認後台是否已成功發布！`);
+        }
         config = await res.json();
-        
+
+        // 確保 MindAR 核心已載入
+        let Engine = getMindARThree();
+        if (!Engine) {
+          statusMsg.innerText = "⏳ 正在載入 AR 核心引擎...";
+          await new Promise(r => setTimeout(r, 800));
+          Engine = getMindARThree();
+        }
+
+        if (!Engine) {
+          throw new Error("AR 核心引擎未能成功載入，請確認網路連線正常後重新整理頁面！");
+        }
+
+        statusMsg.innerText = "✅ 設定檔載入完成，請備妥實體圖卡";
         startBtn.innerText = "點擊啟動 AR 鏡頭";
         startBtn.disabled = false;
         startBtn.onclick = startAR;
-      } catch (e) {
-        startBtn.style.display = 'none';
-        errorMsg.innerText = e.message;
+
+      } catch (err) {
+        console.error(err);
+        statusMsg.className = 'text-error';
+        statusMsg.innerText = err.message;
+        startBtn.innerText = "無法載入";
       }
     }
 
-    // 啟動 AR
+    // 4. 啟動 AR
     async function startAR() {
       startBtn.disabled = true;
       startBtn.innerText = "相機啟動中，請稍候...";
-      errorMsg.innerText = "";
+      statusMsg.className = "text-info";
+      statusMsg.innerText = "若跳出鏡頭授權視窗，請點選「允許」";
 
       try {
-        // 直接使用匯入的 MindARThree 建構
-        const mindarThree = new MindARThree({
+        const MindARThreeClass = getMindARThree();
+        const mindarThree = new MindARThreeClass({
           container: document.querySelector("#ar-container"),
           imageTargetSrc: `./targets.mind?t=${Date.now()}`
         });
@@ -112,12 +141,16 @@
         const ctx = cvs.getContext('2d');
         ctx.fillStyle = "rgba(10, 10, 10, 0.85)";
         ctx.beginPath();
-        ctx.roundRect(20, 20, 984, 216, 40);
+        if (ctx.roundRect) {
+          ctx.roundRect(20, 20, 984, 216, 40);
+        } else {
+          ctx.rect(20, 20, 984, 216);
+        }
         ctx.fill();
         ctx.lineWidth = 8; ctx.strokeStyle = "#007aff"; ctx.stroke();
-        ctx.font = "bold 52px -apple-system, sans-serif"; ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 52px sans-serif"; ctx.fillStyle = "#ffffff";
         ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.fillText(config.bannerText, 512, 128);
+        ctx.fillText(config.bannerText || "👉 點擊任意影片前往官方網站！", 512, 128);
 
         const bannerSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cvs) }));
         bannerSprite.scale.set(1.6, 0.4, 1);
@@ -169,10 +202,10 @@
           clickables.push(mesh);
         });
 
-        // 啟動相機追蹤
+        // 啟動相機
         await mindarThree.start();
         
-        // 成功取得相機串流後關閉遮罩
+        // 成功取得畫面後關閉黑色遮罩
         overlay.style.display = 'none';
 
         renderer.setAnimationLoop(() => {
@@ -194,7 +227,8 @@
       } catch (err) {
         console.error(err);
         startBtn.style.display = 'none';
-        errorMsg.innerText = `相機啟動失敗：\n${err.message}`;
+        statusMsg.className = "text-error";
+        statusMsg.innerText = `相機啟動失敗：\n${err.message}\n\n請確認：\n1. 是否允許相機權限\n2. targets.mind 是否已成功發布`;
       }
     }
 
