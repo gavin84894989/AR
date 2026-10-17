@@ -1,5 +1,5 @@
 {
-  "redirectUrl": "https://example.com",
+  "redirectUrl": "https://google.com",
   "bannerText": "👉 點擊任意影片前往官方網站！",
   "bannerPosY": 0.55,
   "videos": [
@@ -20,17 +20,17 @@
       "smoothness": 0.1,
       "px": 0.6,
       "py": 0,
-      "ry": -15,
+      "ry": -76,
       "rz": 0
     },
     {
       "url": "./videos/video_2.mp4",
-      "keyColor": "#00ff00",
-      "similarity": 0.45,
-      "smoothness": 0.1,
+      "keyColor": "#ffffff",
+      "similarity": 0.05,
+      "smoothness": 0,
       "px": 0,
       "py": 0.75,
-      "ry": 0,
+      "ry": -5,
       "rz": 0
     }
   ]
