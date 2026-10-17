@@ -23,19 +23,20 @@
       background: transparent !important;
     }
 
+    /* 確保相機 video 與 canvas 在同一座標系 */
     #ar-container video {
-      position: absolute !important; top: 0 !important; left: 0 !important;
-      width: 100% !important; height: 100% !important;
+      position: absolute;
+      top: 50% !important; left: 50% !important;
+      transform: translate(-50%, -50%) !important;
       object-fit: cover !important;
       z-index: 1 !important;
-      background: transparent !important;
     }
 
     #ar-container canvas {
-      position: absolute !important; top: 0 !important; left: 0 !important;
-      width: 100% !important; height: 100% !important;
+      position: absolute;
+      top: 50% !important; left: 50% !important;
+      transform: translate(-50%, -50%) !important;
       z-index: 10 !important;
-      background: transparent !important;
       pointer-events: auto;
     }
 
@@ -161,26 +162,26 @@
         const anchor = mindarThree.addAnchor(0);
         const clickables = [];
 
-        // 1. 【獨立建立】：圖卡對位青色邊框 (1x1)
+        // 1. 【對位青色邊框】
         const edgeGeometry = new THREE.EdgesGeometry(new THREE.PlaneGeometry(1, 1));
         const edgeLine = new THREE.LineSegments(
           edgeGeometry,
-          new THREE.LineBasicMaterial({ color: 0x00ffff, linewidth: 4 })
+          new THREE.LineBasicMaterial({ color: 0x00ffff, linewidth: 5 })
         );
         edgeLine.position.z = 0.01;
         anchor.group.add(edgeLine);
 
-        // 2. 【獨立建立】：浮空文字看板 (確保永遠正常渲染)
+        // 2. 【浮空文字看板】
         const cvs = document.createElement('canvas');
         cvs.width = 1024; cvs.height = 256;
         const ctx = cvs.getContext('2d');
-        ctx.fillStyle = "rgba(10, 15, 30, 0.9)";
+        ctx.fillStyle = "rgba(10, 15, 30, 0.95)";
         ctx.beginPath();
         if (ctx.roundRect) ctx.roundRect(12, 12, 1000, 232, 36);
         else ctx.rect(12, 12, 1000, 232);
         ctx.fill();
-        ctx.lineWidth = 10; ctx.strokeStyle = "#007aff"; ctx.stroke();
-        ctx.font = "bold 50px -apple-system, sans-serif"; ctx.fillStyle = "#ffffff";
+        ctx.lineWidth = 12; ctx.strokeStyle = "#007aff"; ctx.stroke();
+        ctx.font = "bold 52px -apple-system, sans-serif"; ctx.fillStyle = "#ffffff";
         ctx.textAlign = "center"; ctx.textBaseline = "middle";
         ctx.fillText(config.bannerText || "👉 點擊前往官方網站！", 512, 128);
 
@@ -193,7 +194,7 @@
         anchor.group.add(bannerMesh);
         clickables.push(bannerMesh);
 
-        // 3. WebGL 去背著色器
+        // 3. 【去背著色器與影片材質】
         const vShader = `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
         const fShader = `
           uniform sampler2D textureMap; uniform vec3 keyColor; uniform float similarity; uniform float smoothness; varying vec2 vUv;
@@ -205,7 +206,9 @@
           }
         `;
 
-        // 4. 【智慧載入】：容錯掛載影片（不存在或 404 自動略過，不拖垮系統）
+        const activeVideos = [];
+
+        // 遍歷影片並建立
         config.videos.forEach((vConfig, idx) => {
           if (!vConfig.url) return;
 
@@ -217,75 +220,66 @@
           v.setAttribute('playsinline', '');
           v.setAttribute('webkit-playsinline', '');
           v.crossOrigin = "anonymous";
+          activeVideos.push(v);
 
-          // 只有當影片真正解碼完成（loadeddata）才建立 3D Mesh，防止 WebGL 崩潰
-          v.addEventListener('loadeddata', () => {
-            const vTexture = new THREE.VideoTexture(v);
-            vTexture.minFilter = THREE.LinearFilter;
-            vTexture.magFilter = THREE.LinearFilter;
-            vTexture.format = THREE.RGBAFormat;
+          const vTexture = new THREE.VideoTexture(v);
+          vTexture.minFilter = THREE.LinearFilter;
+          vTexture.magFilter = THREE.LinearFilter;
+          vTexture.format = THREE.RGBAFormat;
 
-            const mat = new THREE.ShaderMaterial({
-              uniforms: {
-                textureMap: { value: vTexture },
-                keyColor: { value: new THREE.Color(vConfig.keyColor) },
-                similarity: { value: vConfig.similarity },
-                smoothness: { value: vConfig.smoothness }
-              },
-              vertexShader: vShader,
-              fragmentShader: fShader,
-              transparent: true,
-              side: THREE.DoubleSide
-            });
-
-            // 尺寸按照後台預覽比例設定
-            const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.4), mat);
-            mesh.position.set(vConfig.px, vConfig.py, 0.05);
-            mesh.rotation.y = THREE.MathUtils.degToRad(vConfig.ry);
-            mesh.rotation.z = THREE.MathUtils.degToRad(vConfig.rz);
-
-            anchor.group.add(mesh);
-            clickables.push(mesh);
-
-            v.play().catch(e => console.warn(`影片 ${idx + 1} 播放限制:`, e));
+          const mat = new THREE.ShaderMaterial({
+            uniforms: {
+              textureMap: { value: vTexture },
+              keyColor: { value: new THREE.Color(vConfig.keyColor) },
+              similarity: { value: vConfig.similarity },
+              smoothness: { value: vConfig.smoothness }
+            },
+            vertexShader: vShader,
+            fragmentShader: fShader,
+            transparent: true,
+            side: THREE.DoubleSide
           });
 
-          // 觸發載入
-          v.load();
+          const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.4), mat);
+          mesh.position.set(vConfig.px, vConfig.py, 0.05);
+          mesh.rotation.y = THREE.MathUtils.degToRad(vConfig.ry);
+          mesh.rotation.z = THREE.MathUtils.degToRad(vConfig.rz);
+
+          anchor.group.add(mesh);
+          clickables.push(mesh);
         });
 
-        // 5. 追蹤狀態監聽
+        // 4. 【關鍵修復】：不要覆蓋 MindAR 內建可見性邏輯，手動強制設為 visible
+        const origFound = anchor.onTargetFound;
         anchor.onTargetFound = () => {
+          if (origFound) origFound.call(anchor);
+          anchor.group.visible = true; // 強制將群組設為可見
           hud.style.background = "rgba(40, 167, 69, 0.85)";
           hud.innerHTML = "🟢 目標已鎖定！";
+          // 喚醒所有影片播放
+          activeVideos.forEach(v => v.play().catch(() => {}));
         };
+
+        const origLost = anchor.onTargetLost;
         anchor.onTargetLost = () => {
+          if (origLost) origLost.call(anchor);
+          anchor.group.visible = false;
           hud.style.background = "rgba(0, 0, 0, 0.7)";
           hud.innerHTML = "🟡 正在尋找目標圖卡...";
         };
 
-        // 6. 啟動 AR
+        // 5. 啟動 AR
         await mindarThree.start();
-
-        setTimeout(() => {
-          const camVideo = container.querySelector("video");
-          if (camVideo) {
-            camVideo.style.display = "block";
-            camVideo.style.visibility = "visible";
-            camVideo.style.opacity = "1";
-            camVideo.play().catch(() => {});
-          }
-        }, 150);
 
         overlay.style.display = 'none';
         hud.style.display = 'block';
 
-        // 7. 乾淨的渲染循環（交由 Three.js 自動管理紋理刷新）
+        // 6. 渲染循環
         renderer.setAnimationLoop(() => {
           renderer.render(scene, camera);
         });
 
-        // 8. 點擊判定跳轉
+        // 7. 點擊判定跳轉
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
         window.addEventListener('click', (e) => {
