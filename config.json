@@ -1,7 +1,7 @@
 {
   "redirectUrl": "https://example.com",
   "bannerText": "👉 點擊任意影片前往官方網站！",
-  "bannerPosY": 0.8,
+  "bannerPosY": 0.55,
   "videos": [
     {
       "url": "./videos/video_0.mp4",
