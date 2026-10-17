@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>AR 內容發布管理後台 (GitHub API 整合版)</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image.prod.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    body { margin: 0; display: flex; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; height: 100vh; overflow: hidden; background: #1a1a1a; }
+    #preview-container { flex: 1; height: 100%; position: relative; }
+    #preview { width: 100%; height: 100%; }
+    #sidebar { width: 450px; height: 100%; background: #ffffff; overflow-y: auto; padding: 20px; box-sizing: border-box; box-shadow: -2px 0 10px rgba(0,0,0,0.3); }
+    h2 { margin-top: 0; font-size: 18px; border-bottom: 2px solid #007aff; padding-bottom: 8px; color: #333; }
+    .card { background: #f8f9fa; border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin-bottom: 14px; }
+    .card h4 { margin: 0 0 8px 0; color: #007aff; }
+    label { display: block; font-size: 12px; font-weight: bold; margin-top: 6px; color: #444; }
+    input[type=range], input[type=text], input[type=password], input[type=file] { width: 100%; margin: 3px 0; }
+    input[type=text], input[type=password] { height: 28px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; padding: 0 6px; font-size: 12px; }
+    .row { display: flex; gap: 8px; }
+    .col { flex: 1; }
+    #publish-btn { width: 100%; padding: 14px; background: #28a745; color: white; font-size: 16px; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; transition: background 0.2s; }
+    #publish-btn:hover { background: #218838; }
+    #publish-btn:disabled { background: #888; cursor: not-allowed; }
+    #status-log { font-size: 13px; color: #d9534f; margin-top: 10px; text-align: center; font-weight: bold; }
+    #qrcode { display: flex; justify-content: center; margin-top: 15px; }
+    .help-hint { position: absolute; bottom: 15px; left: 15px; color: #888; font-size: 12px; pointer-events: none; }
+  </style>
+</head>
+<body>
+
+  <div id="preview-container">
+    <div id="preview"></div>
+    <div class="help-hint">灰色方框代表實體圖卡識別區，上方黑框為 AR 說明提示看板</div>
+  </div>
+
+  <div id="sidebar">
+    <h2>AR 發布管理後台 (GitHub API)</h2>
+
+    <!-- GitHub 連線設定 -->
+    <div class="card" style="background: #eef4ff; border-color: #b8daff;">
+      <h4>GitHub 連線設定 (免資料庫)</h4>
+      <label>儲存庫路徑 (格式: 帳號/倉庫名稱)</label>
+      <input type="text" id="ghRepo" placeholder="例如: your-name/AR" value="">
+      <label>分支名稱 (預設 main)</label>
+      <input type="text" id="ghBranch" value="main">
+      <label>個人存取權杖 (Personal Access Token, ghp_...)</label>
+      <input type="password" id="ghToken" placeholder="貼上 ghp_ 開頭的權杖">
+    </div>
+
+    <!-- 辨識圖上傳 -->
+    <div class="card">
+      <h4>1. 實體辨識圖卡 (JPG/PNG)</h4>
+      <input type="file" id="targetImgInput" accept="image/png, image/jpeg">
+      <small style="color:#666;">若本次不換圖，可留空沿用既有 targets.mind</small>
+    </div>
+
+    <!-- 全域跳轉與說明 -->
+    <div class="card">
+      <h4>2. 跳轉網址與提示看板</h4>
+      <label>點擊跳轉目標網址 (Redirect URL)</label>
+      <input type="text" id="redirectUrl" value="https://example.com">
+      <label>上方對話框提示文字</label>
+      <input type="text" id="bannerText" value="👉 點擊任意影片前往官方網站！">
+      <label>提示看板垂直高度 (Y)</label>
+      <input type="range" id="bannerPosY" min="0.5" max="2.5" step="0.05" value="1.2">
+    </div>
+
+    <!-- 三支影片控制面板 -->
+    <div id="video-controllers"></div>
+
+    <button id="publish-btn">一鍵發布至 GitHub</button>
+    <div id="status-log"></div>
+    <div id="qrcode"></div>
+  </div>
+
+  <script>
+    // ==========================================
+    // 1. 初始化資料狀態
+    // ==========================================
+    const state = {
+      redirectUrl: "https://example.com",
+      bannerText: "👉 點擊任意影片前往官方網站！",
+      bannerPosY: 1.2,
+      videos: [
+        { url: "./videos/video_0.mp4", keyColor: "#00ff00", similarity: 0.45, smoothness: 0.1, px: -0.6, py: 0, ry: 15, rz: 0 },
+        { url: "./videos/video_1.mp4", keyColor: "#ffffff", similarity: 0.25, smoothness: 0.1, px: 0.6, py: 0, ry: -15, rz: 0 },
+        { url: "./videos/video_2.mp4", keyColor: "#00ff00", similarity: 0.45, smoothness: 0.1, px: 0, py: 0.75, ry: 0, rz: 0 }
+      ]
+    };
+
+    let targetImageFile = null;
+    const localVideoFiles = [null, null, null];
+
+    // 自動讀取上次儲存的 GitHub 連線資訊
+    document.getElementById('ghRepo').value = localStorage.getItem('ar_gh_repo') || '';
+    document.getElementById('ghToken').value = localStorage.getItem('ar_gh_token') || '';
+
+    // ==========================================
+    // 2. 動態產生 3 支影片的設定介面
+    // ==========================================
+    const ctrlBox = document.getElementById('video-controllers');
+    for (let i = 0; i < 3; i++) {
+      ctrlBox.innerHTML += `
+        <div class="card">
+          <h4>影片 ${i + 1}</h4>
+          <label>選取新影片檔案 (MP4，不換則留空)</label>
+          <input type="file" class="v-file" data-idx="${i}" accept="video/mp4">
+          <div class="row">
+            <div class="col"><label>去背色</label><input type="color" class="v-color" data-idx="${i}" value="${state.videos[i].keyColor}"></div>
+            <div class="col"><label>閥值</label><input type="range" class="v-sim" data-idx="${i}" min="0.05" max="0.9" step="0.01" value="${state.videos[i].similarity}"></div>
+            <div class="col"><label>羽化</label><input type="range" class="v-smooth" data-idx="${i}" min="0.0" max="0.3" step="0.01" value="${state.videos[i].smoothness}"></div>
+          </div>
+          <div class="row">
+            <div class="col"><label>水平 X</label><input type="range" class="v-px" data-idx="${i}" min="-2" max="2" step="0.02" value="${state.videos[i].px}"></div>
+            <div class="col"><label>垂直 Y</label><input type="range" class="v-py" data-idx="${i}" min="-2" max="2" step="0.02" value="${state.videos[i].py}"></div>
+          </div>
+          <div class="row">
+            <div class="col"><label>面向 Y</label><input type="range" class="v-ry" data-idx="${i}" min="-90" max="90" step="1" value="${state.videos[i].ry}"></div>
+            <div class="col"><label>傾斜 Z</label><input type="range" class="v-rz" data-idx="${i}" min="-180" max="180" step="1" value="${state.videos[i].rz}"></div>
+          </div>
+        </div>
+      `;
+    }
+
+    // ==========================================
+    // 3. Three.js 預覽畫布建構
+    // ==========================================
+    const container = document.getElementById('preview');
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(45, (window.innerWidth - 450) / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 0, 4.2);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(window.innerWidth - 450, window.innerHeight);
+    container.appendChild(renderer.domElement);
+
+    scene.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0x555555, wireframe: true })));
+
+    // 建立說明看板
+    let bannerSprite = null;
+    function createBannerTexture(text) {
+      const cvs = document.createElement('canvas');
+      cvs.width = 1024; cvs.height = 256;
+      const ctx = cvs.getContext('2d');
+      ctx.fillStyle = "rgba(10, 10, 10, 0.85)";
+      ctx.beginPath();
+      ctx.roundRect(20, 20, 984, 216, 40);
+      ctx.fill();
+      ctx.lineWidth = 8; ctx.strokeStyle = "#007aff"; ctx.stroke();
+      ctx.font = "bold 52px sans-serif"; ctx.fillStyle = "#ffffff";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(text, 512, 128);
+      return new THREE.CanvasTexture(cvs);
+    }
+    bannerSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: createBannerTexture(state.bannerText) }));
+    bannerSprite.scale.set(1.6, 0.4, 1);
+    bannerSprite.position.set(0, state.bannerPosY, 0.1);
+    scene.add(bannerSprite);
+
+    // 建立 3 支影片平面
+    const vShader = `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
+    const fShader = `
+      uniform sampler2D textureMap; uniform vec3 keyColor; uniform float similarity; uniform float smoothness; varying vec2 vUv;
+      void main() {
+        vec4 col = texture2D(textureMap, vUv);
+        float diff = length(col.rgb - keyColor);
+        float alpha = smoothstep(similarity, similarity + smoothness, diff);
+        gl_FragColor = vec4(col.rgb, col.a * alpha);
+      }
+    `;
+
+    const meshes = [], materials = [], videoElements = [];
+    for (let i = 0; i < 3; i++) {
+      const v = document.createElement('video');
+      v.loop = true; v.muted = true; v.playsInline = true; v.crossOrigin = "anonymous";
+      videoElements.push(v);
+
+      const mat = new THREE.ShaderMaterial({
+        uniforms: {
+          textureMap: { value: new THREE.VideoTexture(v) },
+          keyColor: { value: new THREE.Color(state.videos[i].keyColor) },
+          similarity: { value: state.videos[i].similarity },
+          smoothness: { value: state.videos[i].smoothness }
+        },
+        vertexShader: vShader, fragmentShader: fShader, transparent: true
+      });
+      materials.push(mat);
+
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.4), mat);
+      mesh.position.set(state.videos[i].px, state.videos[i].py, 0.05);
+      mesh.rotation.y = THREE.MathUtils.degToRad(state.videos[i].ry);
+      mesh.rotation.z = THREE.MathUtils.degToRad(state.videos[i].rz);
+      scene.add(mesh);
+      meshes.push(mesh);
+    }
+
+    // 事件監聽
+    document.getElementById('targetImgInput').addEventListener('change', e => targetImageFile = e.target.files[0]);
+
+    document.querySelectorAll('.v-file').forEach(input => {
+      input.addEventListener('change', (e) => {
+        const i = parseInt(e.target.dataset.idx);
+        localVideoFiles[i] = e.target.files[0];
+        if (localVideoFiles[i]) {
+          videoElements[i].src = URL.createObjectURL(localVideoFiles[i]);
+          videoElements[i].play();
+        }
+      });
+    });
+
+    document.querySelectorAll('.card').forEach(card => {
+      card.addEventListener('input', (e) => {
+        const i = parseInt(e.target.dataset.idx);
+        if (isNaN(i)) return;
+        const v = state.videos[i];
+        if (e.target.classList.contains('v-color')) v.keyColor = e.target.value;
+        if (e.target.classList.contains('v-sim')) v.similarity = parseFloat(e.target.value);
+        if (e.target.classList.contains('v-smooth')) v.smoothness = parseFloat(e.target.value);
+        if (e.target.classList.contains('v-px')) v.px = parseFloat(e.target.value);
+        if (e.target.classList.contains('v-py')) v.py = parseFloat(e.target.value);
+        if (e.target.classList.contains('v-ry')) v.ry = parseFloat(e.target.value);
+        if (e.target.classList.contains('v-rz')) v.rz = parseFloat(e.target.value);
+
+        materials[i].uniforms.keyColor.value.set(v.keyColor);
+        materials[i].uniforms.similarity.value = v.similarity;
+        materials[i].uniforms.smoothness.value = v.smoothness;
+        meshes[i].position.set(v.px, v.py, 0.05);
+        meshes[i].rotation.y = THREE.MathUtils.degToRad(v.ry);
+        meshes[i].rotation.z = THREE.MathUtils.degToRad(v.rz);
+      });
+    });
+
+    document.getElementById('bannerText').addEventListener('input', (e) => {
+      state.bannerText = e.target.value;
+      bannerSprite.material.map = createBannerTexture(state.bannerText);
+    });
+    document.getElementById('bannerPosY').addEventListener('input', (e) => {
+      state.bannerPosY = parseFloat(e.target.value);
+      bannerSprite.position.y = state.bannerPosY;
+    });
+    document.getElementById('redirectUrl').addEventListener('input', (e) => {
+      state.redirectUrl = e.target.value;
+    });
+
+    function animate() { requestAnimationFrame(animate); renderer.render(scene, camera); }
+    animate();
+
+    // ==========================================
+    // 4. GitHub REST API 核心上傳管線
+    // ==========================================
+    const publishBtn = document.getElementById('publish-btn');
+    const log = document.getElementById('status-log');
+
+    function arrayBufferToBase64(buffer) {
+      const bytes = new Uint8Array(buffer);
+      let binary = '';
+      const chunkSize = 0x8000;
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+      }
+      return btoa(binary);
+    }
+
+    function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function uploadToGitHub(repo, branch, token, path, base64Content, commitMsg) {
+      const url = `https://api.github.com/repos/${repo}/contents/${path}`;
+      let sha = undefined;
+      try {
+        const getRes = await fetch(`${url}?ref=${branch}`, {
+          headers: { "Authorization": `token ${token}` }
+        });
+        if (getRes.ok) {
+          const fileData = await getRes.json();
+          sha = fileData.sha;
+        }
+      } catch (e) {}
+
+      const res = await fetch(url, {
+        method: "PUT",
+        headers: {
+          "Authorization": `token ${token}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          message: commitMsg,
+          content: base64Content,
+          branch: branch,
+          sha: sha
+        })
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json();
+        throw new Error(errJson.message || "上傳失敗");
+      }
+      return true;
+    }
+
+    publishBtn.addEventListener('click', async () => {
+      const repo = document.getElementById('ghRepo').value.trim();
+      const branch = document.getElementById('ghBranch').value.trim() || 'main';
+      const token = document.getElementById('ghToken').value.trim();
+
+      if (!repo || !token) {
+        alert("請完整填寫 GitHub 儲存庫名稱與 Token！");
+        return;
+      }
+
+      localStorage.setItem('ar_gh_repo', repo);
+      localStorage.setItem('ar_gh_token', token);
+
+      publishBtn.disabled = true;
+
+      try {
+        // A. 若有新圖片，在前端直接編譯並上傳 targets.mind
+        if (targetImageFile) {
+          log.innerText = "⏳ 正在本機分析特徵並編譯 targets.mind...";
+          const img = new Image();
+          img.src = URL.createObjectURL(targetImageFile);
+          await new Promise(r => img.onload = r);
+
+          const compiler = new window.MINDAR.IMAGE.Compiler();
+          await compiler.compileImageTargets([img], p => {
+            log.innerText = `⏳ 編譯圖卡特徵: ${(p * 100).toFixed(0)}%`;
+          });
+          const mindBuffer = await compiler.exportData();
+
+          log.innerText = "⏳ 上傳 targets.mind 至 GitHub...";
+          await uploadToGitHub(repo, branch, token, "targets.mind", arrayBufferToBase64(mindBuffer), "自動更新 AR 特徵檔 targets.mind");
+        }
+
+        // B. 上傳有選取的影片檔案
+        for (let i = 0; i < 3; i++) {
+          if (localVideoFiles[i]) {
+            log.innerText = `⏳ 正在上傳影片 ${i + 1} 至 GitHub (videos/video_${i}.mp4)...`;
+            const vBase64 = await fileToBase64(localVideoFiles[i]);
+            await uploadToGitHub(repo, branch, token, `videos/video_${i}.mp4`, vBase64, `自動更新影片 ${i + 1}`);
+            state.videos[i].url = `./videos/video_${i}.mp4`;
+          }
+        }
+
+        // C. 上傳專案全域設定檔 config.json
+        log.innerText = "⏳ 正在同步更新 config.json...";
+        const configJsonString = JSON.stringify(state, null, 2);
+        const configBase64 = btoa(unescape(encodeURIComponent(configJsonString)));
+        await uploadToGitHub(repo, branch, token, "config.json", configBase64, "自動更新 AR 空間與去背參數 config.json");
+
+        log.innerText = "發布成功！已同步至 GitHub Pages。";
+
+        // D. 產生專屬 QR Code (指向同網域下的 viewer.html)
+        const qrContainer = document.getElementById('qrcode');
+        qrContainer.innerHTML = "";
+        const viewerUrl = `${window.location.origin}${window.location.pathname.replace('index.html', '')}viewer.html`;
+        new QRCode(qrContainer, { text: viewerUrl, width: 150, height: 150 });
+
+      } catch (err) {
+        console.error(err);
+        log.innerText = `發布失敗: ${err.message}`;
+      } finally {
+        publishBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
