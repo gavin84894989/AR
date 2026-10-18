@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>AR 觀看端</title>
+  <title>AR 觀看端 - 科技全息版</title>
 
-  <!-- 1. 完整官方模組映射 (補齊 three/addons/ 解決手機卡載入問題，並確保 THREE 100% 同源) -->
+  <!-- 1. 完整官方模組映射 (確保 THREE 與 MindAR 1.2.5 100% 同源) -->
   <script type="importmap">
   {
     "imports": {
@@ -21,10 +21,9 @@
     html, body {
       margin: 0; padding: 0; width: 100%; height: 100%;
       overflow: hidden; background: transparent !important;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-family: "Orbitron", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
 
-    /* 2. 嚴格遵照 MindAR 原生容器設定，不覆寫 canvas/video 的 top/left/width/height */
     #ar-container {
       position: relative;
       width: 100vw;
@@ -33,56 +32,68 @@
       background: transparent !important;
     }
 
-    /* 僅指定圖層順序：鏡頭在 1，3D 畫布在 2，保留 MindAR 計算出的精準座標對位 */
-    #ar-container video {
-      z-index: 1 !important;
-    }
-    #ar-container canvas {
-      z-index: 2 !important;
-    }
+    #ar-container video { z-index: 1 !important; }
+    #ar-container canvas { z-index: 2 !important; }
 
-    /* 隱藏預載影片池 (維持在 DOM 內供 iOS 硬體解碼) */
+    /* 隱藏預載影片池 */
     #video-preload-pool {
       position: fixed; bottom: 0; right: 0;
       width: 1px; height: 1px; opacity: 0.01;
       pointer-events: none; z-index: -1;
     }
 
-    /* 頂部追蹤狀態燈 */
+    /* 頂部科幻 HUD 追蹤狀態燈 */
     #tracker-hud {
-      position: fixed; top: 15px; left: 50%; transform: translateX(-50%);
-      z-index: 1000; padding: 8px 18px; border-radius: 20px;
-      font-size: 14px; font-weight: bold; color: white;
-      background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(4px);
+      position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+      z-index: 1000; padding: 8px 22px;
+      font-size: 13px; font-weight: bold; letter-spacing: 1px; color: #00f3ff;
+      background: rgba(4, 12, 28, 0.85);
+      border: 1px solid #00f3ff;
+      box-shadow: 0 0 12px rgba(0, 243, 255, 0.4), inset 0 0 8px rgba(0, 243, 255, 0.2);
+      clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
       display: none; pointer-events: none; white-space: nowrap;
     }
 
-    /* 左下角即時診斷小面板 */
+    /* 左下角即時診斷面板 */
     #debug-panel {
       position: fixed; bottom: 10px; left: 10px;
-      z-index: 1000; padding: 8px 12px; border-radius: 8px;
+      z-index: 1000; padding: 8px 12px; border-radius: 4px;
       font-size: 11px; line-height: 1.4; color: #00ffcc;
-      background: rgba(0, 0, 0, 0.7); pointer-events: none;
-      max-width: 90vw; white-space: pre-wrap; display: none;
+      background: rgba(4, 12, 24, 0.75);
+      border-left: 3px solid #00f3ff;
+      pointer-events: none; max-width: 90vw; white-space: pre-wrap; display: none;
     }
 
-    /* 啟動遮罩 */
+    /* 科幻感啟動遮罩 */
     #overlay {
       position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-      background: rgba(15, 23, 42, 0.95); display: flex; flex-direction: column;
-      justify-content: center; align-items: center; z-index: 2000; color: white;
+      background: radial-gradient(circle at center, #0a192f 0%, #020617 100%);
+      display: flex; flex-direction: column;
+      justify-content: center; align-items: center; z-index: 2000; color: #00f3ff;
       text-align: center; padding: 20px;
     }
 
-    #start-btn {
-      padding: 15px 36px; font-size: 18px; border: none; border-radius: 30px;
-      background: #007aff; color: white; cursor: pointer; font-weight: bold;
-      box-shadow: 0 4px 15px rgba(0, 122, 255, 0.4);
+    #overlay h2 {
+      letter-spacing: 2px; text-shadow: 0 0 10px rgba(0, 243, 255, 0.6);
+      margin-bottom: 24px;
     }
-    #start-btn:disabled { background: #555; box-shadow: none; }
+
+    #start-btn {
+      padding: 15px 40px; font-size: 17px;
+      border: 1px solid #00f3ff;
+      background: rgba(0, 243, 255, 0.15);
+      color: #00f3ff; cursor: pointer; font-weight: bold; letter-spacing: 1px;
+      box-shadow: 0 0 20px rgba(0, 243, 255, 0.4), inset 0 0 10px rgba(0, 243, 255, 0.3);
+      clip-path: polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%);
+      transition: all 0.25s;
+    }
+    #start-btn:disabled {
+      border-color: #475569; color: #64748b; background: rgba(30, 41, 59, 0.5);
+      box-shadow: none;
+    }
 
     #status-msg {
-      margin-top: 15px; font-size: 14px; line-height: 1.5;
+      margin-top: 18px; font-size: 13px; line-height: 1.6;
       white-space: pre-wrap; max-width: 90%; color: #94a3b8;
     }
     .text-error { color: #ff4d4f !important; font-weight: bold; }
@@ -90,19 +101,18 @@
 </head>
 <body>
 
-  <div id="tracker-hud">🟡 正在尋找目標圖卡...</div>
-  <div id="debug-panel">初始化中...</div>
+  <div id="tracker-hud">📡 SCANNING // 正在搜尋目標圖卡...</div>
+  <div id="debug-panel">SYS.INIT...</div>
 
   <div id="overlay">
-    <h2>WebAR 互動體驗</h2>
-    <button id="start-btn" disabled>連線中...</button>
+    <h2>◈ WEBAR HOLOGRAM SYSTEM ◈</h2>
+    <button id="start-btn" disabled>SYSTEM LOADING...</button>
     <div id="status-msg">正在檢查環境與載入設定檔...</div>
   </div>
 
   <div id="ar-container"></div>
   <div id="video-preload-pool"></div>
 
-  <!-- 使用一般 script 搭配動態 import()，任何載入錯誤皆可被攔截顯示，絕不卡死 -->
   <script>
     const startBtn = document.getElementById('start-btn');
     const overlay = document.getElementById('overlay');
@@ -114,7 +124,7 @@
     let THREE = null;
     let MindARThree = null;
     let config = null;
-    const validVideoItems = []; // 儲存真正存在於 GitHub 的影片項目
+    const validVideoItems = [];
 
     function checkInAppBrowser() {
       const ua = navigator.userAgent || navigator.vendor || window.opera;
@@ -127,7 +137,6 @@
       return false;
     }
 
-    // 檢查遠端影片是否真的存在 (過濾掉未上傳的 404 預設路徑)
     async function checkVideoExists(url) {
       if (!url) return false;
       try {
@@ -138,29 +147,160 @@
       }
     }
 
+    // =========================================================
+    // 視覺工具 1：繪製賽博科幻 HUD 浮空文字看板 (Canvas 2D)
+    // =========================================================
+    function createSciFiBannerTexture(text) {
+      const cvs = document.createElement('canvas');
+      cvs.width = 1024;
+      cvs.height = 280;
+      const ctx = cvs.getContext('2d');
+
+      const cut = 38; // 斜切角尺寸
+      const x = 24, y = 24, w = 976, h = 232;
+
+      // 定義斜切八角裝甲路徑
+      function drawHudPath() {
+        ctx.beginPath();
+        ctx.moveTo(x + cut, y);
+        ctx.lineTo(x + w - cut, y);
+        ctx.lineTo(x + w, y + cut);
+        ctx.lineTo(x + w, y + h - cut);
+        ctx.lineTo(x + w - cut, y + h);
+        ctx.lineTo(x + cut, y + h);
+        ctx.lineTo(x, y + h - cut);
+        ctx.lineTo(x, y + cut);
+        ctx.closePath();
+      }
+
+      // 1. 半透明深海藍科技漸層底色
+      const grad = ctx.createLinearGradient(0, y, 0, y + h);
+      grad.addColorStop(0, "rgba(4, 15, 35, 0.92)");
+      grad.addColorStop(0.5, "rgba(8, 28, 60, 0.88)");
+      grad.addColorStop(1, "rgba(4, 15, 35, 0.92)");
+      drawHudPath();
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // 2. 內部科技細網格線 (Grid Pattern)
+      ctx.save();
+      drawHudPath();
+      ctx.clip();
+      ctx.strokeStyle = "rgba(0, 243, 255, 0.08)";
+      ctx.lineWidth = 2;
+      for (let gx = x; gx < x + w; gx += 32) {
+        ctx.beginPath(); ctx.moveTo(gx, y); ctx.lineTo(gx, y + h); ctx.stroke();
+      }
+      for (let gy = y; gy < y + h; gy += 32) {
+        ctx.beginPath(); ctx.moveTo(x, gy); ctx.lineTo(x + w, gy); ctx.stroke();
+      }
+      ctx.restore();
+
+      // 3. 外層霓虹發光邊框
+      ctx.save();
+      drawHudPath();
+      ctx.shadowColor = "#00f3ff";
+      ctx.shadowBlur = 18;
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = "#00f3ff";
+      ctx.stroke();
+      ctx.restore();
+
+      // 4. 四角高亮裝飾重裝護角 (Corner Brackets)
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 8;
+      // 左上護角
+      ctx.beginPath();
+      ctx.moveTo(x, y + cut + 40); ctx.lineTo(x, y + cut); ctx.lineTo(x + cut, y); ctx.lineTo(x + cut + 60, y);
+      ctx.stroke();
+      // 右下護角
+      ctx.beginPath();
+      ctx.moveTo(x + w, y + h - cut - 40); ctx.lineTo(x + w, y + h - cut); ctx.lineTo(x + w - cut, y + h); ctx.lineTo(x + w - cut - 60, y + h);
+      ctx.stroke();
+
+      // 5. 頂部與底部科技裝飾小字 (HUD Telemetry)
+      ctx.font = "bold 20px monospace";
+      ctx.fillStyle = "#00f3ff";
+      ctx.textAlign = "left";
+      ctx.fillText("◈ SYS.AR // HOLOGRAM_LINK_ACTIVE", x + cut + 15, y + 34);
+
+      ctx.textAlign = "right";
+      ctx.fillStyle = "#38bdf8";
+      ctx.fillText("[ TAP TO ACCESS PORTAL >>> ]", x + w - cut - 15, y + h - 20);
+
+      // 裝飾性科技水平分割線
+      ctx.strokeStyle = "rgba(0, 243, 255, 0.4)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x + cut + 15, y + 48);
+      ctx.lineTo(x + w - cut - 15, y + 48);
+      ctx.stroke();
+
+      // 6. 中央主文字 (具霓虹光暈)
+      ctx.save();
+      ctx.font = "bold 48px -apple-system, BlinkMacSystemFont, sans-serif";
+      ctx.fillStyle = "#ffffff";
+      ctx.shadowColor = "#00f3ff";
+      ctx.shadowBlur = 14;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(text || "👉 點擊任意影片前往官方網站！", 512, y + h / 2 + 8);
+      ctx.restore();
+
+      const tex = new THREE.CanvasTexture(cvs);
+      tex.needsUpdate = true;
+      return tex;
+    }
+
+    // =========================================================
+    // 視覺工具 2：建立 3D L 型科技四角準星框 (供影片與圖卡使用)
+    // =========================================================
+    function createTechCornerFrame(width, height, cornerLen, colorHex) {
+      const hw = width / 2;
+      const hh = height / 2;
+      const c = cornerLen;
+
+      const points = [
+        // 左上 L
+        -hw, hh - c, 0,  -hw, hh, 0,   -hw, hh, 0,  -hw + c, hh, 0,
+        // 右上 L
+        hw - c, hh, 0,   hw, hh, 0,    hw, hh, 0,   hw, hh - c, 0,
+        // 右下 L
+        hw, -hh + c, 0,  hw, -hh, 0,   hw, -hh, 0,  hw - c, -hh, 0,
+        // 左下 L
+        -hw + c, -hh, 0, -hw, -hh, 0,  -hw, -hh, 0, -hw, -hh + c, 0
+      ];
+
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
+      const mat = new THREE.LineBasicMaterial({
+        color: colorHex,
+        transparent: true,
+        opacity: 0.9,
+        depthWrite: false
+      });
+      return new THREE.LineSegments(geo, mat);
+    }
+
     async function init() {
       if (checkInAppBrowser()) return;
 
       try {
-        // 1. 讀取 config.json
-        statusMsg.innerText = "⏳ 1/3 正在讀取 config.json 設定檔...";
+        statusMsg.innerText = "⏳ [1/3] 正在讀取 config.json 設定檔...";
         const res = await fetch(`./config.json?t=${Date.now()}`);
         if (!res.ok) throw new Error(`找不到 config.json (HTTP ${res.status})`);
         config = await res.json();
 
-        // 2. 載入同源 Three.js 與 MindAR 1.2.5 核心
-        statusMsg.innerText = "⏳ 2/3 正在載入 3D 與 AR 核心引擎...";
+        statusMsg.innerText = "⏳ [2/3] 正在載入 3D 與 AR 全息引擎...";
         THREE = await import('three');
         const mindarModule = await import('mindar-image-three');
         MindARThree = mindarModule.MindARThree;
 
-        // 關閉新版 Three.js 色彩空間自動轉換，確保去背色碼與後台預覽 100% 一致
         if (THREE.ColorManagement) {
           THREE.ColorManagement.enabled = false;
         }
 
-        // 3. 檢查並預先建立真正存在的影片標籤
-        statusMsg.innerText = "⏳ 3/3 正在檢查已發布的影片資產...";
+        statusMsg.innerText = "⏳ [3/3] 正在驗證全息影片資產...";
         if (config.videos && Array.isArray(config.videos)) {
           for (let i = 0; i < config.videos.length; i++) {
             const vConf = config.videos[i];
@@ -182,8 +322,8 @@
           }
         }
 
-        statusMsg.innerText = `✅ 準備就緒（偵測到 ${validVideoItems.length} 支有效影片）\n請將鏡頭對準實體圖卡`;
-        startBtn.innerText = "點擊啟動 AR 鏡頭";
+        statusMsg.innerText = `✅ 系統就緒（已掛載 ${validVideoItems.length} 組全息影像）\n請將鏡頭對準實體識別圖卡`;
+        startBtn.innerText = "INITIALIZE AR // 啟動鏡頭";
         startBtn.disabled = false;
         startBtn.onclick = startAR;
 
@@ -191,15 +331,15 @@
         console.error(err);
         statusMsg.className = 'text-error';
         statusMsg.innerText = `初始化失敗：\n${err.message}`;
-        startBtn.innerText = "載入失敗";
+        startBtn.innerText = "SYSTEM ERROR";
       }
     }
 
     async function startAR() {
       startBtn.disabled = true;
-      startBtn.innerText = "相機啟動中...";
+      startBtn.innerText = "LINKING CAMERA...";
 
-      // 【關鍵修復】：在使用者點擊按鈕的「第一時間同步區段」喚醒所有影片，100% 取得手機播放授權
+      // 第一時間同步喚醒所有影片，確保手機硬體播放權限
       validVideoItems.forEach(item => {
         item.element.play().catch(e => console.warn(`影片 ${item.index} 初始喚醒:`, e));
       });
@@ -220,42 +360,37 @@
         const anchor = mindarThree.addAnchor(0);
         const clickables = [];
 
-        // ==========================================
-        // A. 建立圖卡對位青色外框 (1x1 標準尺寸)
-        // ==========================================
-        const borderGeo = new THREE.EdgesGeometry(new THREE.PlaneGeometry(1, 1));
-        const borderMat = new THREE.LineBasicMaterial({ color: 0x00ffff });
-        const borderLine = new THREE.LineSegments(borderGeo, borderMat);
-        borderLine.position.set(0, 0, 0.01);
-        anchor.group.add(borderLine);
+        // =========================================================
+        // A. 圖卡科技雷達鎖定陣列 (四角準星 + 動態雙層旋轉光環)
+        // =========================================================
+        const targetReticle = createTechCornerFrame(1.02, 1.02, 0.22, 0x00f3ff);
+        targetReticle.position.set(0, 0, 0.01);
+        anchor.group.add(targetReticle);
 
-        // ==========================================
-        // B. 建立 3D 浮空文字看板 (關閉深度遮擋，確保永遠在最上層可見)
-        // ==========================================
-        const cvs = document.createElement('canvas');
-        cvs.width = 1024;
-        cvs.height = 256;
-        const ctx = cvs.getContext('2d');
+        // 外層科技斷續環
+        const outerRingGeo = new THREE.RingGeometry(0.42, 0.44, 32, 1, 0, Math.PI * 1.5);
+        const outerRingMat = new THREE.MeshBasicMaterial({
+          color: 0x00f3ff, side: THREE.DoubleSide, transparent: true, opacity: 0.45, depthWrite: false
+        });
+        const outerRing = new THREE.Mesh(outerRingGeo, outerRingMat);
+        outerRing.position.set(0, 0, 0.008);
+        anchor.group.add(outerRing);
 
-        // 繪製深藍底色與亮藍邊框
-        ctx.fillStyle = "rgba(10, 15, 30, 0.92)";
-        ctx.fillRect(10, 10, 1004, 236);
-        ctx.lineWidth = 12;
-        ctx.strokeStyle = "#007aff";
-        ctx.strokeRect(10, 10, 1004, 236);
+        // 內層反向掃描環
+        const innerRingGeo = new THREE.RingGeometry(0.32, 0.335, 32, 1, 0, Math.PI * 1.2);
+        const innerRingMat = new THREE.MeshBasicMaterial({
+          color: 0x38bdf8, side: THREE.DoubleSide, transparent: true, opacity: 0.35, depthWrite: false
+        });
+        const innerRing = new THREE.Mesh(innerRingGeo, innerRingMat);
+        innerRing.position.set(0, 0, 0.008);
+        anchor.group.add(innerRing);
 
-        // 繪製文字
-        ctx.font = "bold 50px sans-serif";
-        ctx.fillStyle = "#ffffff";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(config.bannerText || "👉 點擊任意影片前往官方網站！", 512, 128);
-
-        const bannerTexture = new THREE.CanvasTexture(cvs);
-        bannerTexture.needsUpdate = true;
-
+        // =========================================================
+        // B. 建立科幻 HUD 浮空文字看板
+        // =========================================================
+        const bannerTexture = createSciFiBannerTexture(config.bannerText);
         const bannerMesh = new THREE.Mesh(
-          new THREE.PlaneGeometry(1.3, 0.32),
+          new THREE.PlaneGeometry(1.35, 0.37),
           new THREE.MeshBasicMaterial({
             map: bannerTexture,
             transparent: true,
@@ -263,16 +398,15 @@
             depthWrite: false
           })
         );
-        // 讀取後台設定高度，預設 0.65 (緊鄰圖卡上緣)
-        const bannerY = (config.bannerPosY !== undefined) ? Number(config.bannerPosY) : 0.65;
-        bannerMesh.position.set(0, bannerY, 0.06);
+        const baseBannerY = (config.bannerPosY !== undefined) ? Number(config.bannerPosY) : 0.65;
+        bannerMesh.position.set(0, baseBannerY, 0.06);
         bannerMesh.renderOrder = 10;
         anchor.group.add(bannerMesh);
         clickables.push(bannerMesh);
 
-        // ==========================================
-        // C. 建立去背影片平面 (僅針對實際存在的影片建立)
-        // ==========================================
+        // =========================================================
+        // C. 建立全息投影去背影片 (GLSL 去背 + 掃描線 + 流光帶 + 3D 護角)
+        // =========================================================
         const vShader = `
           varying vec2 vUv;
           void main() {
@@ -285,16 +419,30 @@
           uniform vec3 keyColor;
           uniform float similarity;
           uniform float smoothness;
+          uniform float uTime;
           varying vec2 vUv;
+
           void main() {
             vec4 col = texture2D(textureMap, vUv);
             float diff = length(col.rgb - keyColor);
             float alpha = smoothstep(similarity, similarity + smoothness, diff);
-            gl_FragColor = vec4(col.rgb, col.a * alpha);
+
+            // 1. 細膩科技水平掃描紋 (Scanline)
+            float scanline = sin(vUv.y * 160.0 - uTime * 6.0) * 0.035;
+
+            // 2. 週期性由上往下掠過的全息高光掃描帶 (Laser Sweep)
+            float sweepPos = 1.0 - fract(uTime * 0.4);
+            float sweep = smoothstep(0.09, 0.0, abs(vUv.y - sweepPos)) * 0.22;
+
+            // 將科技冷光與掃描帶疊加於去背後的實體人物上
+            vec3 holoGlow = vec3(0.0, 0.95, 1.0) * (sweep + max(0.0, scanline));
+            vec3 finalRgb = clamp(col.rgb + holoGlow * alpha, 0.0, 1.0);
+
+            gl_FragColor = vec4(finalRgb, col.a * alpha);
           }
         `;
 
-        const activeVideoTextures = [];
+        const activeVideoShaders = [];
 
         validVideoItems.forEach((item, idx) => {
           const v = item.element;
@@ -303,40 +451,54 @@
           const vTexture = new THREE.VideoTexture(v);
           vTexture.minFilter = THREE.LinearFilter;
           vTexture.magFilter = THREE.LinearFilter;
-          activeVideoTextures.push({ texture: vTexture, video: v, id: item.index });
 
           const mat = new THREE.ShaderMaterial({
             uniforms: {
               textureMap: { value: vTexture },
               keyColor: { value: new THREE.Color(vConfig.keyColor || "#00ff00") },
               similarity: { value: Number(vConfig.similarity ?? 0.4) },
-              smoothness: { value: Number(vConfig.smoothness ?? 0.1) }
+              smoothness: { value: Number(vConfig.smoothness ?? 0.1) },
+              uTime: { value: 0.0 }
             },
             vertexShader: vShader,
             fragmentShader: fShader,
             transparent: true,
             side: THREE.DoubleSide,
-            depthWrite: false // 關鍵：防止透明區域遮擋其他 3D 物件
+            depthWrite: false
           });
 
-          const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.75, 0.45), mat);
+          const planeW = 0.75, planeH = 0.45;
+          const mesh = new THREE.Mesh(new THREE.PlaneGeometry(planeW, planeH), mat);
           mesh.position.set(Number(vConfig.px || 0), Number(vConfig.py || 0), 0.04 + idx * 0.01);
           mesh.rotation.y = THREE.MathUtils.degToRad(Number(vConfig.ry || 0));
           mesh.rotation.z = THREE.MathUtils.degToRad(Number(vConfig.rz || 0));
           mesh.renderOrder = 5 + idx;
 
+          // 為每支影片掛載專屬的 3D 科技準星護角與底部投影能量線
+          const videoHudFrame = createTechCornerFrame(planeW + 0.06, planeH + 0.06, 0.12, 0x00f3ff);
+          videoHudFrame.position.set(0, 0, 0.002);
+          mesh.add(videoHudFrame);
+
           anchor.group.add(mesh);
           clickables.push(mesh);
+
+          activeVideoShaders.push({
+            texture: vTexture,
+            material: mat,
+            video: v,
+            id: item.index
+          });
         });
 
-        // ==========================================
+        // =========================================================
         // D. 綁定目標鎖定與遺失事件
-        // ==========================================
+        // =========================================================
         let isTargetLocked = false;
         anchor.onTargetFound = () => {
           isTargetLocked = true;
-          hud.style.background = "rgba(40, 167, 69, 0.9)";
-          hud.innerHTML = "🟢 目標已鎖定！";
+          hud.style.borderColor = "#00ff88";
+          hud.style.color = "#00ff88";
+          hud.innerHTML = "🟢 TARGET LOCKED // 全息投影已鎖定";
           validVideoItems.forEach(item => {
             if (item.element.paused) item.element.play().catch(() => {});
           });
@@ -344,41 +506,53 @@
 
         anchor.onTargetLost = () => {
           isTargetLocked = false;
-          hud.style.background = "rgba(0, 0, 0, 0.75)";
-          hud.innerHTML = "🟡 正在尋找目標圖卡...";
+          hud.style.borderColor = "#00f3ff";
+          hud.style.color = "#00f3ff";
+          hud.innerHTML = "📡 SCANNING // 正在搜尋目標圖卡...";
         };
 
-        // 啟動 MindAR
         await mindarThree.start();
 
         overlay.style.display = 'none';
         hud.style.display = 'block';
         debugPanel.style.display = 'block';
 
-        // ==========================================
-        // E. 渲染迴圈與即時診斷資訊更新
-        // ==========================================
+        // =========================================================
+        // E. 動畫迴圈：驅動全息掃描線、雷達旋轉與看板懸浮
+        // =========================================================
+        const clock = new THREE.Clock();
+
         renderer.setAnimationLoop(() => {
+          const elapsedTime = clock.getElapsedTime();
+
+          // 1. 浮空文字框：柔和上下呼吸懸浮
+          bannerMesh.position.y = baseBannerY + Math.sin(elapsedTime * 2.5) * 0.02;
+
+          // 2. 圖卡雷達環：雙向逆轉科技動態
+          outerRing.rotation.z = -elapsedTime * 0.6;
+          innerRing.rotation.z = elapsedTime * 1.1;
+
+          // 3. 更新每支影片的全息時間參數與紋理
           let vStatusText = "";
-          activeVideoTextures.forEach(vt => {
-            if (vt.video.readyState >= vt.video.HAVE_CURRENT_DATA) {
-              vt.texture.needsUpdate = true;
+          activeVideoShaders.forEach(vs => {
+            vs.material.uniforms.uTime.value = elapsedTime;
+            if (vs.video.readyState >= vs.video.HAVE_CURRENT_DATA) {
+              vs.texture.needsUpdate = true;
             }
-            vStatusText += `影片${vt.id}: ${vt.video.paused ? '暫停' : '播放中'} (${vt.video.videoWidth}x${vt.video.videoHeight})\n`;
+            vStatusText += `影片${vs.id}: ${vs.video.paused ? '暫停' : '播放中'} (${vs.video.videoWidth}x${vs.video.videoHeight})\n`;
           });
 
           debugPanel.innerText =
-            `[診斷面板] 追蹤狀態: ${isTargetLocked ? '已鎖定' : '搜尋中'}\n` +
-            `錨點子物件數: ${anchor.group.children.length} (含外框+看板+${activeVideoTextures.length}支影片)\n` +
-            `看板座標 Y: ${bannerY}\n` +
+            `[SYS.DIAGNOSTICS] 狀態: ${isTargetLocked ? 'LOCKED' : 'SCANNING'}\n` +
+            `全息圖層數: ${anchor.group.children.length} | 看板基準 Y: ${baseBannerY}\n` +
             (vStatusText || "無有效影片檔案");
 
           renderer.render(scene, camera);
         });
 
-        // ==========================================
-        // F. 點擊跳轉判定 (支援手機觸控 touchstart 與 click)
-        // ==========================================
+        // =========================================================
+        // F. 點擊與觸控跳轉判定
+        // =========================================================
         const raycaster = new THREE.Raycaster();
         const pointer = new THREE.Vector2();
 
