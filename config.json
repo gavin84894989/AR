@@ -1,16 +1,16 @@
 {
-  "redirectUrl": "https://google.com",
+  "redirectUrl": "https://youtu.be/BlrHaedOOUU",
   "bannerText": "👉 點擊任意影片前往官方網站！",
   "bannerPosY": 0.75,
   "videos": [
     {
       "url": "./videos/video_0.mp4",
-      "keyColor": "#1b4b11",
-      "similarity": 0.4,
-      "smoothness": 0.1,
-      "px": -0.4,
+      "keyColor": "#00ff2a",
+      "similarity": 0.42,
+      "smoothness": 0.07,
+      "px": 0.45,
       "py": 0,
-      "ry": 0,
+      "ry": -10,
       "rz": 0
     },
     {
@@ -45,25 +45,25 @@
     "rz": 0,
     "hotspots": [
       {
-        "id": 1792336947034,
+        "id": 1792337447606,
         "label": "點位 1",
-        "uvX": 0.5123,
-        "uvY": 0.4914,
-        "url": "https://youtu.be/BlrHaedOOUU"
+        "uvX": 0.5009,
+        "uvY": 0.4783,
+        "url": "https://inff.cc/"
       },
       {
-        "id": 1792336962256,
+        "id": 1792337471854,
         "label": "點位 2",
-        "uvX": 0.4497,
-        "uvY": 0.5608,
-        "url": "https://youtu.be/BlrHaedOOUU"
+        "uvX": 0.4526,
+        "uvY": 0.5621,
+        "url": "https://www.opentix.life/event/2090269380048343041?tapeID=ttc03smaA3-"
       },
       {
-        "id": 1792336965866,
+        "id": 1792337506169,
         "label": "點位 3",
-        "uvX": 0.4839,
-        "uvY": 0.6381,
-        "url": "https://youtu.be/BlrHaedOOUU"
+        "uvX": 0.481,
+        "uvY": 0.625,
+        "url": "https://home.gamer.com.tw/artwork.php?sn=5799647"
       }
     ]
   }
