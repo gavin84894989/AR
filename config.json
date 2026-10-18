@@ -1,24 +1,24 @@
 {
-  "redirectUrl": "https://example.com",
+  "redirectUrl": "https://google.com",
   "bannerText": "👉 點擊任意影片前往官方網站！",
-  "bannerPosY": 0.8,
+  "bannerPosY": 0.95,
   "videos": [
     {
       "url": "./videos/video_0.mp4",
-      "keyColor": "#0eb930",
-      "similarity": 0.45,
-      "smoothness": 0.1,
-      "px": -0.6,
+      "keyColor": "#1ecc1e",
+      "similarity": 0.39,
+      "smoothness": 0.2,
+      "px": -0.66,
       "py": 0,
-      "ry": -61,
+      "ry": -49,
       "rz": 0
     },
     {
       "url": "./videos/video_1.mp4",
-      "keyColor": "#ffffff",
-      "similarity": 0.25,
+      "keyColor": "#f7f7f7",
+      "similarity": 0.05,
       "smoothness": 0.1,
-      "px": 0.6,
+      "px": 0.2,
       "py": 0,
       "ry": -15,
       "rz": 0
