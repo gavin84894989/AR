@@ -30,10 +30,8 @@
     .col { flex: 1; }
     .hint { font-size: 11px; color: #64748b; margin-top: 3px; }
 
-    /* 圖片點位標註器：原圖上的標記設為完全透明 (opacity: 0)，不遮擋原圖任何顏色 */
-    #hotspot-editor-wrap {
-      margin-top: 10px; display: none;
-    }
+    /* 原圖上的標記設為完全透明 (opacity: 0)，不在原圖顯示任何顏色 */
+    #hotspot-editor-wrap { margin-top: 10px; display: none; }
     #hotspot-canvas-box {
       position: relative; width: 100%; border: 1px solid #cbd5e1; border-radius: 6px;
       overflow: hidden; cursor: crosshair; background: #0f172a;
@@ -71,14 +69,11 @@
 </head>
 <body>
 
-  <!-- 左側 3D 即時預覽區 -->
   <div id="preview-area"></div>
 
-  <!-- 右側管理面板 -->
   <div id="sidebar">
     <h2>AR 發布管理後台</h2>
 
-    <!-- GitHub 連線設定 -->
     <div class="card">
       <h3>GitHub 連線設定</h3>
       <label>儲存庫路徑 (可填 gavin84894889/AR 或完整網址)</label>
@@ -89,17 +84,15 @@
       <input type="password" id="gh-token" placeholder="ghp_xxxxxxxxxxxx">
     </div>
 
-    <!-- 1. 實體掃描圖卡 -->
     <div class="card">
       <h3>1. 實體掃描圖卡 (JPG/PNG)</h3>
       <input type="file" id="target-file" accept="image/png, image/jpeg">
       <div class="hint">若本次不換圖，可留空沿用既有 targets.mind</div>
     </div>
 
-    <!-- 2. 跳轉網址與提示看板 -->
     <div class="card">
       <h3>2. 跳轉網址與提示看板</h3>
-      <label>點擊後跳轉目標網址 (Redirect URL)</label>
+      <label>點擊後跳轉目標網址 (Redirect URL 預設連結)</label>
       <input type="text" id="redirect-url" value="https://example.com">
       <label>上方對語框顯示文字</label>
       <input type="text" id="banner-text" value="👉 點擊任意影片前往官方網站！">
@@ -107,7 +100,6 @@
       <input type="range" id="banner-y" min="-1" max="1.5" step="0.05" value="0.65">
     </div>
 
-    <!-- 3. AR 互動圖片與透明點位設定 -->
     <div class="card" style="border-color: #38bdf8; background: #f0f9ff;">
       <h3>3. AR 互動圖片與透明點位連結</h3>
       <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
@@ -129,9 +121,8 @@
         <div class="col"><label>傾斜 RZ</label><input type="range" id="img-rz" min="-180" max="180" step="1" value="0"></div>
       </div>
 
-      <!-- 視覺化圖片點擊標註區 (原圖完全乾淨無標記) -->
       <div id="hotspot-editor-wrap">
-        <label style="color:#0284c7; font-weight:bold;">👇 直接點擊下方圖片任意位置即可新增透明點位：</label>
+        <label style="color:#0284c7; font-weight:bold;">👇 點擊下方圖片新增透明點位（網址留空則自動連往預設連結）：</label>
         <div id="hotspot-canvas-box">
           <img id="hotspot-preview-img" alt="AR 互動圖片預覽">
           <div id="hotspot-pins-layer"></div>
@@ -140,7 +131,6 @@
       </div>
     </div>
 
-    <!-- 4. 3 支去背循環影片設定 -->
     <div id="video-controls"></div>
 
     <button id="publish-btn">🚀 一鍵發布至 GitHub 並產生 QR</button>
@@ -162,7 +152,6 @@
       return 'https://' + trimmed;
     }
 
-    // 動態生成 3 組影片控制卡
     const videoControlsContainer = document.getElementById('video-controls');
     const defaultPos = [{ x: -0.4, y: 0 }, { x: 0.4, y: 0 }, { x: 0, y: -0.45 }];
 
@@ -197,9 +186,6 @@
     branchInput.value = localStorage.getItem('ar_gh_branch') || 'main';
     tokenInput.value = localStorage.getItem('ar_gh_token') || '';
 
-    // =========================================================
-    // 左側 Three.js 3D 即時預覽初始化
-    // =========================================================
     const previewArea = document.getElementById('preview-area');
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(45, previewArea.clientWidth / previewArea.clientHeight, 0.1, 100);
@@ -287,9 +273,6 @@
       });
     }
 
-    // =========================================================
-    // AR 互動圖片與「全透明點位」管理邏輯
-    // =========================================================
     let hotspotsData = [];
     let currentImageAspect = 1.0;
 
@@ -317,36 +300,39 @@
       };
     });
 
-    // 將畫面上輸入框的最新文字同步回 hotspotsData (防止貼上未觸發事件)
     function syncHotspotInputsFromDOM() {
+      const defaultUrl = normalizeUrl(document.getElementById('redirect-url').value);
       const rows = hotspotListEl.querySelectorAll('.hs-item');
       rows.forEach((row, idx) => {
         if (hotspotsData[idx]) {
           const labelInput = row.querySelector('.hs-label-in');
           const urlInput = row.querySelector('.hs-url-in');
           if (labelInput) hotspotsData[idx].label = labelInput.value.trim();
-          if (urlInput) hotspotsData[idx].url = normalizeUrl(urlInput.value);
+          if (urlInput) {
+            const customUrl = normalizeUrl(urlInput.value);
+            hotspotsData[idx].url = customUrl || defaultUrl;
+          }
         }
       });
     }
 
-    // 在圖片上點擊：新增透明點位
     document.getElementById('hotspot-canvas-box').addEventListener('click', (e) => {
       if (!previewImgEl.src) return;
-      syncHotspotInputsFromDOM(); // 先保存既有欄位的最新網址
+      syncHotspotInputsFromDOM();
 
       const rect = previewImgEl.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) return;
 
       const uvX = Number(((e.clientX - rect.left) / rect.width).toFixed(4));
       const uvY = Number(((e.clientY - rect.top) / rect.height).toFixed(4));
+      const defaultUrl = normalizeUrl(document.getElementById('redirect-url').value);
 
       hotspotsData.push({
         id: Date.now(),
         label: `點位 ${hotspotsData.length + 1}`,
         uvX: Math.max(0, Math.min(1, uvX)),
         uvY: Math.max(0, Math.min(1, uvY)),
-        url: ""
+        url: defaultUrl
       });
 
       renderHotspotEditorUI();
@@ -357,43 +343,22 @@
       hotspotListEl.innerHTML = '';
 
       hotspotsData.forEach((spot, idx) => {
-        // 原圖上的標記設為完全透明 (.hs-pin opacity: 0)，不在原圖上留下任何顏色標記
         const pin = document.createElement('div');
         pin.className = 'hs-pin';
         pin.style.left = `${spot.uvX * 100}%`;
         pin.style.top = `${spot.uvY * 100}%`;
         pinsLayer.appendChild(pin);
 
-        // 下方列表顯示座標百分比與網址輸入欄
         const coordText = `(${Math.round(spot.uvX * 100)}%, ${Math.round(spot.uvY * 100)}%)`;
         const row = document.createElement('div');
         row.className = 'hs-item';
         row.innerHTML = `
           <div class="hs-badge">#${idx + 1} ${coordText}</div>
           <input type="text" placeholder="備註" value="${spot.label || ''}" style="width:65px;" data-idx="${idx}" class="hs-label-in">
-          <input type="text" placeholder="請貼上新連結網址 (https://...)" value="${spot.url || ''}" style="flex:1;" data-idx="${idx}" class="hs-url-in">
+          <input type="text" placeholder="連結網址 (留空則用預設連結)" value="${spot.url || ''}" style="flex:1;" data-idx="${idx}" class="hs-url-in">
           <button type="button" class="hs-del-btn" data-idx="${idx}">✕</button>
         `;
         hotspotListEl.appendChild(row);
-      });
-
-      hotspotListEl.querySelectorAll('.hs-label-in').forEach(inp => {
-        ['input', 'change', 'paste', 'blur'].forEach(evt => {
-          inp.addEventListener(evt, (e) => {
-            hotspotsData[Number(e.target.dataset.idx)].label = e.target.value;
-          });
-        });
-      });
-
-      hotspotListEl.querySelectorAll('.hs-url-in').forEach(inp => {
-        ['input', 'change', 'paste', 'blur'].forEach(evt => {
-          inp.addEventListener(evt, (e) => {
-            setTimeout(() => {
-              const i = Number(e.target.dataset.idx);
-              if (hotspotsData[i]) hotspotsData[i].url = e.target.value.trim();
-            }, 10);
-          });
-        });
       });
 
       hotspotListEl.querySelectorAll('.hs-del-btn').forEach(btn => {
@@ -431,7 +396,6 @@
       previewImgMesh.geometry = new THREE.PlaneGeometry(planeW, planeH);
     });
 
-    // 啟動時自動讀取既有 config.json，還原先前設定的點位與網址
     async function loadExistingConfig() {
       try {
         const res = await fetch(`./config.json?t=${Date.now()}`);
@@ -471,7 +435,6 @@
     }
     loadExistingConfig();
 
-    // 3D 預覽迴圈
     function animatePreview() {
       requestAnimationFrame(animatePreview);
 
@@ -508,9 +471,6 @@
       renderer.setSize(previewArea.clientWidth, previewArea.clientHeight);
     });
 
-    // =========================================================
-    // GitHub API 工具函式與一鍵發布邏輯
-    // =========================================================
     function sanitizeRepoString(input) {
       let cleaned = input.trim();
       cleaned = cleaned.replace(/^https?:\/\/github\.com\//i, '');
@@ -568,7 +528,6 @@
     }
 
     document.getElementById('publish-btn').addEventListener('click', async () => {
-      // 關鍵步驟：發布前強制從 DOM 輸入框抓取最新貼上的所有點位網址
       syncHotspotInputsFromDOM();
 
       const btn = document.getElementById('publish-btn');
@@ -639,7 +598,7 @@
 
         status.innerText = "⏳ 正在更新 config.json 設定檔...";
         const configObj = {
-          redirectUrl: normalizeUrl(document.getElementById('redirect-url').value),
+          redirectUrl: normalizeUrl(document.getElementById('redirect-url').value) || "https://example.com",
           bannerText: document.getElementById('banner-text').value,
           bannerPosY: Number(document.getElementById('banner-y').value),
           videos: videosConfig,
@@ -657,7 +616,7 @@
         };
 
         const configB64 = btoa(unescape(encodeURIComponent(JSON.stringify(configObj, null, 2))));
-        await uploadToGitHub(repo, branch, token, "config.json", configB64, "Update config.json with transparent hotspots");
+        await uploadToGitHub(repo, branch, token, "config.json", configB64, "Update config.json");
 
         const qrContainer = document.getElementById('qrcode');
         qrContainer.innerHTML = "";
@@ -665,7 +624,7 @@
         new QRCode(qrContainer, { text: viewerUrl, width: 150, height: 150 });
 
         status.style.color = "#10b981";
-        status.innerText = `✅ 發布成功！（已儲存 ${hotspotsData.length} 個透明點位連結）\n觀看端網址：\n${viewerUrl}`;
+        status.innerText = `✅ 發布成功！\n觀看端網址：\n${viewerUrl}`;
       } catch (err) {
         console.error(err);
         status.style.color = "#ef4444";
