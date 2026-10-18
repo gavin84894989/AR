@@ -3,9 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>AR 觀看端 - 怪化貓浮世繪卷</title>
+  <title>AR 觀看端</title>
 
-  <!-- 1. 官方模組映射 (THREE 與 MindAR 1.2.5 同源) -->
+  <!-- 官方同源模組映射 (Three.js r160 + MindAR 1.2.5) -->
   <script type="importmap">
   {
     "imports": {
@@ -21,7 +21,7 @@
     html, body {
       margin: 0; padding: 0; width: 100%; height: 100%;
       overflow: hidden; background: transparent !important;
-      font-family: "Noto Serif TC", "Songti TC", "PMingLiU", "DFKai-SB", serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
 
     #ar-container {
@@ -35,89 +35,62 @@
     #ar-container video { z-index: 1 !important; }
     #ar-container canvas { z-index: 2 !important; }
 
-    /* 隱藏預載影片池 */
+    /* 隱藏預載影片池 (確保手機硬體持續解碼) */
     #video-preload-pool {
       position: fixed; bottom: 0; right: 0;
       width: 1px; height: 1px; opacity: 0.01;
       pointer-events: none; z-index: -1;
     }
 
-    /* 頂部怪化貓御札風格 HUD 狀態燈 */
+    /* 頂部簡潔追蹤狀態燈 */
     #tracker-hud {
-      position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
-      z-index: 1000; padding: 8px 24px;
-      font-size: 14px; font-weight: 900; letter-spacing: 2px; color: #fef08a;
-      background: linear-gradient(90deg, rgba(46, 16, 101, 0.92), rgba(136, 19, 55, 0.92), rgba(46, 16, 101, 0.92));
-      border: 2px solid #fbbf24;
-      outline: 2px solid #e11d48;
-      outline-offset: -5px;
-      box-shadow: 0 4px 18px rgba(225, 29, 72, 0.55);
+      position: fixed; top: 15px; left: 50%; transform: translateX(-50%);
+      z-index: 1000; padding: 8px 18px; border-radius: 20px;
+      font-size: 14px; font-weight: bold; color: white;
+      background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(4px);
       display: none; pointer-events: none; white-space: nowrap;
     }
 
     /* 左下角即時診斷面板 */
     #debug-panel {
       position: fixed; bottom: 10px; left: 10px;
-      z-index: 1000; padding: 8px 12px;
-      font-size: 11px; line-height: 1.4; color: #fde047;
-      background: rgba(20, 10, 30, 0.8);
-      border-left: 3px solid #e11d48;
-      border-right: 1px solid #fbbf24;
-      font-family: monospace;
-      pointer-events: none; max-width: 90vw; white-space: pre-wrap; display: none;
+      z-index: 1000; padding: 8px 12px; border-radius: 8px;
+      font-size: 11px; line-height: 1.4; color: #00ffcc;
+      background: rgba(0, 0, 0, 0.7); pointer-events: none;
+      max-width: 90vw; white-space: pre-wrap; display: none;
     }
 
-    /* 怪化貓浮世繪和紙啟動遮罩 */
+    /* 啟動遮罩 (簡潔原版風格) */
     #overlay {
       position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-      background:
-        radial-gradient(circle at 50% 35%, rgba(159, 18, 57, 0.45) 0%, rgba(30, 27, 75, 0.92) 60%, #090514 100%);
-      display: flex; flex-direction: column;
-      justify-content: center; align-items: center; z-index: 2000; color: #fef08a;
-      text-align: center; padding: 24px;
-      border: 6px double #fbbf24;
-    }
-
-    #overlay h2 {
-      font-size: 24px; letter-spacing: 4px; color: #fef08a;
-      text-shadow: 0 2px 0 #e11d48, 0 0 18px rgba(251, 191, 36, 0.7);
-      margin-bottom: 8px;
-    }
-
-    #overlay .sub-title {
-      font-size: 13px; letter-spacing: 6px; color: #fda4af; margin-bottom: 28px;
+      background: rgba(15, 23, 42, 0.95); display: flex; flex-direction: column;
+      justify-content: center; align-items: center; z-index: 2000; color: white;
+      text-align: center; padding: 20px;
     }
 
     #start-btn {
-      padding: 15px 38px; font-size: 18px; font-family: inherit;
-      border: 2px solid #fbbf24;
-      background: linear-gradient(135deg, #9f1239 0%, #be123c 50%, #701a75 100%);
-      color: #fef08a; cursor: pointer; font-weight: 900; letter-spacing: 3px;
-      box-shadow: 0 0 22px rgba(225, 29, 72, 0.6), inset 0 0 10px rgba(251, 191, 36, 0.4);
-      transition: all 0.25s;
+      padding: 15px 36px; font-size: 18px; border: none; border-radius: 30px;
+      background: #007aff; color: white; cursor: pointer; font-weight: bold;
+      box-shadow: 0 4px 15px rgba(0, 122, 255, 0.4);
     }
-    #start-btn:disabled {
-      border-color: #64748b; color: #94a3b8; background: #1e293b;
-      box-shadow: none;
-    }
+    #start-btn:disabled { background: #555; box-shadow: none; }
 
     #status-msg {
-      margin-top: 18px; font-size: 13px; line-height: 1.6;
-      white-space: pre-wrap; max-width: 90%; color: #fde68a;
+      margin-top: 15px; font-size: 14px; line-height: 1.5;
+      white-space: pre-wrap; max-width: 90%; color: #94a3b8;
     }
     .text-error { color: #ff4d4f !important; font-weight: bold; }
   </style>
 </head>
 <body>
 
-  <div id="tracker-hud">【 尋覓：形・真・理 // 請對準繪卷圖卡 】</div>
-  <div id="debug-panel">SYS.INIT...</div>
+  <div id="tracker-hud">🟡 正在尋找目標圖卡...</div>
+  <div id="debug-panel">初始化中...</div>
 
   <div id="overlay">
-    <h2>◈ 浮世繪實境・百鬼御札 ◈</h2>
-    <div class="sub-title">― 形・真・理 ―</div>
-    <button id="start-btn" disabled>結界準備中...</button>
-    <div id="status-msg">正在檢視環境與載入設定檔...</div>
+    <h2>WebAR 互動體驗</h2>
+    <button id="start-btn" disabled>連線中...</button>
+    <div id="status-msg">正在檢查環境與載入設定檔...</div>
   </div>
 
   <div id="ar-container"></div>
@@ -157,237 +130,47 @@
       }
     }
 
-    // =========================================================
-    // 怪化貓視覺工具 1：繪製「御札・浮世繪和紙金箔」浮空文字框
-    // =========================================================
-    function createMononokeBannerTexture(text) {
+    // 繪製原版簡潔圓角浮空文字框
+    function createCleanBannerTexture(text) {
       const cvs = document.createElement('canvas');
       cvs.width = 1024;
-      cvs.height = 300;
+      cvs.height = 256;
       const ctx = cvs.getContext('2d');
 
-      const x = 24, y = 24, w = 976, h = 252;
-      const notch = 28; // 傳統隅切角尺寸
-
-      function drawOfudaPath(inset = 0) {
-        const ix = x + inset, iy = y + inset, iw = w - inset * 2, ih = h - inset * 2;
-        ctx.beginPath();
-        ctx.moveTo(ix + notch, iy);
-        ctx.lineTo(ix + iw - notch, iy);
-        ctx.lineTo(ix + iw, iy + notch);
-        ctx.lineTo(ix + iw, iy + ih - notch);
-        ctx.lineTo(ix + iw - notch, iy + ih);
-        ctx.lineTo(ix + notch, iy + ih);
-        ctx.lineTo(ix, iy + ih - notch);
-        ctx.lineTo(ix, iy + notch);
-        ctx.closePath();
+      ctx.fillStyle = "rgba(10, 10, 10, 0.85)";
+      ctx.beginPath();
+      if (ctx.roundRect) {
+        ctx.roundRect(20, 20, 984, 216, 40);
+      } else {
+        ctx.rect(20, 20, 984, 216);
       }
-
-      // 1. 絢麗撞色底圖 (紫紺、胭脂紅、金茶漸層)
-      const bgGrad = ctx.createLinearGradient(x, y, x + w, y + h);
-      bgGrad.addColorStop(0, "rgba(30, 11, 54, 0.95)");
-      bgGrad.addColorStop(0.35, "rgba(112, 16, 48, 0.94)");
-      bgGrad.addColorStop(0.65, "rgba(136, 19, 55, 0.94)");
-      bgGrad.addColorStop(1, "rgba(23, 37, 84, 0.95)");
-      drawOfudaPath(0);
-      ctx.fillStyle = bgGrad;
       ctx.fill();
 
-      // 2. 內部青海波紋理與散落金箔砂子 (Gold Leaf Specks)
-      ctx.save();
-      drawOfudaPath(6);
-      ctx.clip();
-
-      // 繪製浮世繪青海波暗紋
-      ctx.strokeStyle = "rgba(251, 191, 36, 0.12)";
-      ctx.lineWidth = 2;
-      for (let row = y; row < y + h + 60; row += 45) {
-        for (let col = x; col < x + w + 80; col += 90) {
-          const offsetX = ((row / 45) % 2) * 45;
-          for (let r = 15; r <= 45; r += 15) {
-            ctx.beginPath();
-            ctx.arc(col + offsetX, row, r, Math.PI, 0);
-            ctx.stroke();
-          }
-        }
-      }
-
-      // 撒金箔砂子與朱砂點
-      for (let i = 0; i < 95; i++) {
-        const gx = x + Math.random() * w;
-        const gy = y + Math.random() * h;
-        const size = 2 + Math.random() * 6;
-        ctx.fillStyle = Math.random() > 0.3
-          ? `rgba(251, 191, 36, ${0.25 + Math.random() * 0.55})`
-          : `rgba(20, 184, 166, ${0.25 + Math.random() * 0.4})`;
-        ctx.fillRect(gx, gy, size, size);
-      }
-      ctx.restore();
-
-      // 3. 外層赤金太框與內層朱紅細框
-      ctx.save();
-      drawOfudaPath(0);
-      ctx.shadowColor = "#fbbf24";
-      ctx.shadowBlur = 15;
       ctx.lineWidth = 8;
-      ctx.strokeStyle = "#fbbf24";
+      ctx.strokeStyle = "#007aff";
       ctx.stroke();
 
-      drawOfudaPath(12);
-      ctx.lineWidth = 4;
-      ctx.strokeStyle = "#f43f5e";
-      ctx.stroke();
-      ctx.restore();
-
-      // 4. 左右兩側傳統「朱印落款」裝飾牌
-      function drawStamp(sx, sy, labelTop, labelBottom) {
-        ctx.save();
-        ctx.fillStyle = "#be123c";
-        ctx.strokeStyle = "#fbbf24";
-        ctx.lineWidth = 3;
-        ctx.fillRect(sx, sy, 48, 130);
-        ctx.strokeRect(sx, sy, 48, 130);
-        ctx.fillStyle = "#fef08a";
-        ctx.font = "bold 24px serif";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(labelTop, sx + 24, sy + 42);
-        ctx.fillText(labelBottom, sx + 24, sy + 88);
-        ctx.restore();
-      }
-      drawStamp(x + 28, y + 60, "御", "札");
-      drawStamp(x + w - 76, y + 60, "真", "理");
-
-      // 5. 頂部與底部浮世繪題跋小字
-      ctx.font = "bold 22px serif";
-      ctx.fillStyle = "#fde047";
-      ctx.textAlign = "center";
-      ctx.fillText("❖ 退 魔 繪 卷 ・ 結 界 開 顯 ❖", 512, y + 42);
-
-      ctx.font = "bold 20px serif";
-      ctx.fillStyle = "#5eead4"; // 怪化貓經典青綠撞色
-      ctx.fillText("【 點 擊 繪 卷 影 像 進 入 異 界 傳 送 門 】", 512, y + h - 32);
-
-      // 6. 中央主文字 (濃金襯底 + 象牙白明朝體)
-      ctx.save();
-      ctx.font = "900 46px 'Noto Serif TC', 'Songti TC', serif";
+      ctx.font = "bold 50px -apple-system, BlinkMacSystemFont, sans-serif";
+      ctx.fillStyle = "#ffffff";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.shadowColor = "#000000";
-      ctx.shadowBlur = 8;
-      ctx.lineWidth = 8;
-      ctx.strokeStyle = "#881337";
-      ctx.strokeText(text || "👉 點擊任意影片前往官方網站！", 512, y + h / 2 + 2);
-
-      ctx.fillStyle = "#fef9c3";
-      ctx.fillText(text || "👉 點擊任意影片前往官方網站！", 512, y + h / 2 + 2);
-      ctx.restore();
+      ctx.fillText(text || "👉 點擊任意影片前往官方網站！", 512, 128);
 
       const tex = new THREE.CanvasTexture(cvs);
       tex.needsUpdate = true;
       return tex;
-    }
-
-    // =========================================================
-    // 怪化貓視覺工具 2：繪製「退魔八卦曼荼羅結界陣」(圖卡與角色底座)
-    // =========================================================
-    function createMononokeMandalaTexture() {
-      const cvs = document.createElement('canvas');
-      cvs.width = 512;
-      cvs.height = 512;
-      const ctx = cvs.getContext('2d');
-      const cx = 256, cy = 256;
-
-      ctx.translate(cx, cy);
-
-      // 外圈朱紅與赤金雙環
-      ctx.strokeStyle = "#e11d48";
-      ctx.lineWidth = 8;
-      ctx.beginPath(); ctx.arc(0, 0, 236, 0, Math.PI * 2); ctx.stroke();
-
-      ctx.strokeStyle = "#fbbf24";
-      ctx.lineWidth = 5;
-      ctx.beginPath(); ctx.arc(0, 0, 222, 0, Math.PI * 2); ctx.stroke();
-
-      // 繪製八芒星結界幾何陣 (Octagram)
-      for (let k = 0; k < 2; k++) {
-        ctx.save();
-        ctx.rotate((k * Math.PI) / 4);
-        ctx.strokeStyle = k === 0 ? "#fbbf24" : "#2dd4bf";
-        ctx.lineWidth = 4;
-        ctx.strokeRect(-150, -150, 300, 300);
-        ctx.restore();
-      }
-
-      // 放射符文刻度
-      ctx.strokeStyle = "rgba(251, 191, 36, 0.7)";
-      ctx.lineWidth = 3;
-      for (let i = 0; i < 16; i++) {
-        ctx.save();
-        ctx.rotate((i * Math.PI) / 8);
-        ctx.beginPath();
-        ctx.moveTo(0, -185);
-        ctx.lineTo(0, -218);
-        ctx.stroke();
-        ctx.restore();
-      }
-
-      // 內圈紫紺朱印環
-      ctx.strokeStyle = "#f43f5e";
-      ctx.lineWidth = 4;
-      ctx.beginPath(); ctx.arc(0, 0, 120, 0, Math.PI * 2); ctx.stroke();
-
-      const tex = new THREE.CanvasTexture(cvs);
-      tex.needsUpdate = true;
-      return tex;
-    }
-
-    // =========================================================
-    // 怪化貓視覺工具 3：建立影片周圍的「朱紅金箔隅切護符框」
-    // =========================================================
-    function createTalismanVideoFrame(width, height) {
-      const group = new THREE.Group();
-      const hw = width / 2;
-      const hh = height / 2;
-      const c = Math.min(width, height) * 0.22;
-
-      // 外層赤金護角
-      const goldPts = [
-        -hw, hh - c, 0,  -hw, hh, 0,   -hw, hh, 0,  -hw + c, hh, 0,
-        hw - c, hh, 0,   hw, hh, 0,    hw, hh, 0,   hw, hh - c, 0,
-        hw, -hh + c, 0,  hw, -hh, 0,   hw, -hh, 0,  hw - c, -hh, 0,
-        -hw + c, -hh, 0, -hw, -hh, 0,  -hw, -hh, 0, -hw, -hh + c, 0
-      ];
-      const goldGeo = new THREE.BufferGeometry();
-      goldGeo.setAttribute('position', new THREE.Float32BufferAttribute(goldPts, 3));
-      const goldLine = new THREE.LineSegments(
-        goldGeo,
-        new THREE.LineBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.95, depthWrite: false })
-      );
-
-      // 內層朱紅細框
-      const redGeo = new THREE.EdgesGeometry(new THREE.PlaneGeometry(width * 0.94, height * 0.94));
-      const redLine = new THREE.LineSegments(
-        redGeo,
-        new THREE.LineBasicMaterial({ color: 0xe11d48, transparent: true, opacity: 0.7, depthWrite: false })
-      );
-      redLine.position.z = -0.002;
-
-      group.add(goldLine);
-      group.add(redLine);
-      return group;
     }
 
     async function init() {
       if (checkInAppBrowser()) return;
 
       try {
-        statusMsg.innerText = "⏳ [壹/參] 正在讀取 config.json 繪卷設定檔...";
+        statusMsg.innerText = "⏳ 1/3 正在讀取 config.json 設定檔...";
         const res = await fetch(`./config.json?t=${Date.now()}`);
         if (!res.ok) throw new Error(`找不到 config.json (HTTP ${res.status})`);
         config = await res.json();
 
-        statusMsg.innerText = "⏳ [貳/參] 正在載入 3D 與 AR 結界核心...";
+        statusMsg.innerText = "⏳ 2/3 正在載入 3D 與 AR 核心引擎...";
         THREE = await import('three');
         const mindarModule = await import('mindar-image-three');
         MindARThree = mindarModule.MindARThree;
@@ -396,7 +179,7 @@
           THREE.ColorManagement.enabled = false;
         }
 
-        statusMsg.innerText = "⏳ [參/參] 正在檢驗已發布的影像資產...";
+        statusMsg.innerText = "⏳ 3/3 正在檢查已發布的影片資產...";
         if (config.videos && Array.isArray(config.videos)) {
           for (let i = 0; i < config.videos.length; i++) {
             const vConf = config.videos[i];
@@ -404,13 +187,24 @@
             if (exists) {
               const v = document.createElement('video');
               v.src = `${vConf.url}?t=${Date.now()}`;
+
+              // 【第一重循環保障】：標準屬性與行動端內嵌設定
               v.loop = true;
               v.muted = true;
               v.playsInline = true;
+              v. setAttribute('loop', '');
+              v.setAttribute('muted', '');
               v.setAttribute('playsinline', '');
               v.setAttribute('webkit-playsinline', '');
               v.setAttribute('preload', 'auto');
               v.crossOrigin = "anonymous";
+
+              // 【第二重循環保障】：監聽 ended 事件，播完立刻歸零重播
+              v.addEventListener('ended', () => {
+                v.currentTime = 0;
+                v.play().catch(() => {});
+              });
+
               preloadPool.appendChild(v);
               v.load();
               validVideoItems.push({ index: i + 1, element: v, config: vConf });
@@ -418,8 +212,8 @@
           }
         }
 
-        statusMsg.innerText = `✅ 結界準備就緒（已載入 ${validVideoItems.length} 卷靈像）\n請將鏡頭對準實體圖卡`;
-        startBtn.innerText = "【 解 封 結 界 // 啟 動 實 境 】";
+        statusMsg.innerText = `✅ 準備就緒（偵測到 ${validVideoItems.length} 支有效影片）\n請將鏡頭對準實體圖卡`;
+        startBtn.innerText = "點擊啟動 AR 鏡頭";
         startBtn.disabled = false;
         startBtn.onclick = startAR;
 
@@ -427,15 +221,15 @@
         console.error(err);
         statusMsg.className = 'text-error';
         statusMsg.innerText = `初始化失敗：\n${err.message}`;
-        startBtn.innerText = "結界異常";
+        startBtn.innerText = "載入失敗";
       }
     }
 
     async function startAR() {
       startBtn.disabled = true;
-      startBtn.innerText = "開啟天眼鏡頭中...";
+      startBtn.innerText = "相機啟動中...";
 
-      // 第一時間同步喚醒所有影片，取得行動端播放授權
+      // 手勢第一時間同步喚醒所有影片
       validVideoItems.forEach(item => {
         item.element.play().catch(e => console.warn(`影片 ${item.index} 初始喚醒:`, e));
       });
@@ -443,7 +237,7 @@
       try {
         const container = document.querySelector("#ar-container");
 
-        // 【穩定化核心 1】：調降 filterMinCF 與 filterBeta，大幅壓制手機移動時的抖動與邊緣拉扯
+        // 啟用底層抗抖動濾波參數
         const mindarThree = new MindARThree({
           container: container,
           imageTargetSrc: `./targets.mind?t=${Date.now()}`,
@@ -458,10 +252,9 @@
         const { renderer, scene, camera } = mindarThree;
         renderer.setClearColor(0x000000, 0);
 
-        // 原始追蹤錨點 (僅作為座標數據源)
         const rawAnchor = mindarThree.addAnchor(0);
 
-        // 【穩定化核心 2】：建立獨立於場景的「平滑防手震立體群組 (smoothGroup)」
+        // 獨立平滑防手震群組 (過濾手機移動時的晃動與變形)
         const smoothGroup = new THREE.Group();
         smoothGroup.visible = false;
         scene.add(smoothGroup);
@@ -469,50 +262,11 @@
         const clickables = [];
 
         // =========================================================
-        // A. 底層 (Z = 0.01)：圖卡表面退魔八卦曼荼羅結界陣
+        // A. 簡潔浮空文字看板 (原版圓角黑底藍框，無額外雕飾)
         // =========================================================
-        const mandalaTex = createMononokeMandalaTexture();
-        const mandalaMesh = new THREE.Mesh(
-          new THREE.PlaneGeometry(1.05, 1.05),
-          new THREE.MeshBasicMaterial({
-            map: mandalaTex,
-            transparent: true,
-            opacity: 0.85,
-            side: THREE.DoubleSide,
-            depthWrite: false
-          })
-        );
-        mandalaMesh.position.set(0, 0, 0.01);
-        smoothGroup.add(mandalaMesh);
-
-        // =========================================================
-        // B. 中層 (Z = 0.02 ~ 0.28)：3D 漂浮金箔靈子粒子系統 (強化空間景深)
-        // =========================================================
-        const particleCount = 45;
-        const pPositions = new Float32Array(particleCount * 3);
-        for (let i = 0; i < particleCount; i++) {
-          pPositions[i * 3] = (Math.random() - 0.5) * 1.4;
-          pPositions[i * 3 + 1] = (Math.random() - 0.5) * 1.4;
-          pPositions[i * 3 + 2] = 0.02 + Math.random() * 0.26; // 分布於空中不同深度
-        }
-        const pGeo = new THREE.BufferGeometry();
-        pGeo.setAttribute('position', new THREE.BufferAttribute(pPositions, 3));
-        const pMat = new THREE.PointsMaterial({
-          color: 0xfbbf24,
-          size: 0.035,
-          transparent: true,
-          opacity: 0.85,
-          depthWrite: false
-        });
-        const goldParticles = new THREE.Points(pGeo, pMat);
-        smoothGroup.add(goldParticles);
-
-        // =========================================================
-        // C. 頂層 (Z = 0.14)：御札浮世繪浮空文字看板
-        // =========================================================
-        const bannerTexture = createMononokeBannerTexture(config.bannerText);
+        const bannerTexture = createCleanBannerTexture(config.bannerText);
         const bannerMesh = new THREE.Mesh(
-          new THREE.PlaneGeometry(1.32, 0.38),
+          new THREE.PlaneGeometry(1.3, 0.32),
           new THREE.MeshBasicMaterial({
             map: bannerTexture,
             transparent: true,
@@ -521,13 +275,13 @@
           })
         );
         const baseBannerY = (config.bannerPosY !== undefined) ? Number(config.bannerPosY) : 0.65;
-        bannerMesh.position.set(0, baseBannerY, 0.14);
+        bannerMesh.position.set(0, baseBannerY, 0.12);
         bannerMesh.renderOrder = 20;
         smoothGroup.add(bannerMesh);
         clickables.push(bannerMesh);
 
         // =========================================================
-        // D. 前景立體層 (Z = 0.16)：去背影片 + 和紙金箔著色器 + 動態長寬比校正
+        // B. 純淨去背影片平面 (無額外邊框、無濾鏡、自動校正真實比例)
         // =========================================================
         const vShader = `
           varying vec2 vUv;
@@ -541,37 +295,18 @@
           uniform vec3 keyColor;
           uniform float similarity;
           uniform float smoothness;
-          uniform float uTime;
           varying vec2 vUv;
-
-          // 浮世繪和紙微紋理隨機雜訊函數
-          float hash(vec2 p) {
-            return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
-          }
 
           void main() {
             vec4 col = texture2D(textureMap, vUv);
             float diff = length(col.rgb - keyColor);
             float alpha = smoothstep(similarity, similarity + smoothness, diff);
-
-            // 1. 和紙纖維微質感 (Washi Paper Grain)
-            float paperGrain = (hash(floor(vUv * 240.0)) - 0.5) * 0.04;
-
-            // 2. 金箔瑞氣流光波紋 (Golden Spirit Shimmer)
-            float wave = sin(vUv.y * 8.0 - uTime * 2.2 + sin(vUv.x * 6.0) * 1.5);
-            float goldSweep = smoothstep(0.82, 1.0, wave) * 0.18;
-
-            // 3. 邊緣朱金靈氣光暈
-            float edgeAura = smoothstep(0.1, 0.45, alpha) * (1.0 - smoothstep(0.45, 0.95, alpha));
-            vec3 mononokeTint = vec3(1.0, 0.84, 0.25) * goldSweep + vec3(0.95, 0.2, 0.35) * edgeAura * 0.35;
-
-            vec3 finalRgb = clamp(col.rgb + paperGrain + mononokeTint * alpha, 0.0, 1.0);
-            gl_FragColor = vec4(finalRgb, col.a * alpha);
+            gl_FragColor = vec4(col.rgb, col.a * alpha);
           }
         `;
 
         const activeVideoObjects = [];
-        const basePlaneHeight = 0.55; // 基準高度，寬度將依影片真實比例自動調整
+        const basePlaneHeight = 0.55;
 
         validVideoItems.forEach((item, idx) => {
           const v = item.element;
@@ -586,8 +321,7 @@
               textureMap: { value: vTexture },
               keyColor: { value: new THREE.Color(vConfig.keyColor || "#00ff00") },
               similarity: { value: Number(vConfig.similarity ?? 0.4) },
-              smoothness: { value: Number(vConfig.smoothness ?? 0.1) },
-              uTime: { value: 0.0 }
+              smoothness: { value: Number(vConfig.smoothness ?? 0.1) }
             },
             vertexShader: vShader,
             fragmentShader: fShader,
@@ -596,37 +330,17 @@
             depthWrite: false
           });
 
-          // 建立 1:1 基礎平面，稍後透過 scale.x 自動套用真實長寬比，徹底解決左右拉大變形
           const mesh = new THREE.Mesh(new THREE.PlaneGeometry(basePlaneHeight, basePlaneHeight), mat);
 
           const baseX = Number(vConfig.px || 0);
           const baseY = Number(vConfig.py || 0);
-          const baseZ = 0.16 + idx * 0.02; // 顯著拔高 Z 軸，創造真實空中懸浮視差
+          const baseZ = 0.15 + idx * 0.02; // 懸浮於圖卡上方空中，創造立體感
           const baseRY = THREE.MathUtils.degToRad(Number(vConfig.ry || 0));
           const baseRZ = THREE.MathUtils.degToRad(Number(vConfig.rz || 0));
 
           mesh.position.set(baseX, baseY, baseZ);
           mesh.rotation.set(0, baseRY, baseRZ);
           mesh.renderOrder = 10 + idx;
-
-          // 掛載怪化貓朱紅金箔護符外框
-          const talismanFrame = createTalismanVideoFrame(basePlaneHeight * 1.08, basePlaneHeight * 1.08);
-          talismanFrame.position.set(0, 0, -0.005);
-          mesh.add(talismanFrame);
-
-          // 在圖卡表面 (Z = 0.015) 建立該角色的「專屬底部結界投影底座」，凸顯空中浮動的高度差
-          const shadowSeal = new THREE.Mesh(
-            new THREE.RingGeometry(0.12, 0.22, 24),
-            new THREE.MeshBasicMaterial({
-              color: 0xe11d48,
-              side: THREE.DoubleSide,
-              transparent: true,
-              opacity: 0.5,
-              depthWrite: false
-            })
-          );
-          shadowSeal.position.set(baseX, baseY, 0.015);
-          smoothGroup.add(shadowSeal);
 
           smoothGroup.add(mesh);
           clickables.push(mesh);
@@ -635,17 +349,15 @@
             id: item.index,
             video: v,
             texture: vTexture,
-            material: mat,
             mesh: mesh,
-            shadowSeal: shadowSeal,
             baseX, baseY, baseZ, baseRY, baseRZ,
             aspectCalibrated: false,
-            phase: idx * 2.1
+            phase: idx * 1.8
           });
         });
 
         // =========================================================
-        // E. 追蹤狀態與雙重阻尼平滑變數 (LERP / SLERP)
+        // C. 追蹤狀態與防手震平滑變數 (LERP / SLERP)
         // =========================================================
         let isTargetLocked = false;
         let hasInitializedPose = false;
@@ -660,9 +372,8 @@
 
         rawAnchor.onTargetFound = () => {
           isTargetLocked = true;
-          hud.style.borderColor = "#fbbf24";
-          hud.style.color = "#fef08a";
-          hud.innerHTML = "🟢 【 結界開顯 // モノノ怪・現形 】";
+          hud.style.background = "rgba(40, 167, 69, 0.9)";
+          hud.innerHTML = "🟢 目標已鎖定！";
           validVideoItems.forEach(item => {
             if (item.element.paused) item.element.play().catch(() => {});
           });
@@ -672,9 +383,8 @@
           isTargetLocked = false;
           hasInitializedPose = false;
           smoothGroup.visible = false;
-          hud.style.borderColor = "#f43f5e";
-          hud.style.color = "#fda4af";
-          hud.innerHTML = "📡 【 尋覓：形・真・理 // 請對準繪卷圖卡 】";
+          hud.style.background = "rgba(0, 0, 0, 0.75)";
+          hud.innerHTML = "🟡 正在尋找目標圖卡...";
         };
 
         await mindarThree.start();
@@ -684,14 +394,14 @@
         debugPanel.style.display = 'block';
 
         // =========================================================
-        // F. 渲染迴圈：執行矩陣防抖插值、比例校正與 3D 空氣懸浮律動
+        // D. 渲染迴圈：防手震插值 + 第三重無限循環巡檢 + 3D 空中浮動
         // =========================================================
         const clock = new THREE.Clock();
 
         renderer.setAnimationLoop(() => {
           const elapsedTime = clock.getElapsedTime();
 
-          // 1. 執行雙重防手震插值：過濾手機移動時的旋轉扭曲與抖動
+          // 1. 雙重阻尼防手震插值 (抑制手機移動造成的拉扯與晃動)
           if (isTargetLocked) {
             rawAnchor.group.matrix.decompose(targetPos, targetQuat, targetScale);
 
@@ -702,10 +412,9 @@
                 smoothScale.copy(targetScale);
                 hasInitializedPose = true;
               } else {
-                // 位移採用 0.20 平滑跟隨；旋轉採用 0.10 強效阻尼，抑制手機移動造成的平面歪斜拉扯
-                smoothPos.lerp(targetPos, 0.20);
-                smoothQuat.slerp(targetQuat, 0.10);
-                smoothScale.lerp(targetScale, 0.20);
+                smoothPos.lerp(targetPos, 0.22);
+                smoothQuat.slerp(targetQuat, 0.12);
+                smoothScale.lerp(targetScale, 0.22);
               }
               smoothGroup.visible = true;
               smoothGroup.position.copy(smoothPos);
@@ -714,65 +423,54 @@
             }
           }
 
-          // 2. 退魔八卦曼荼羅陣慢速旋轉
-          mandalaMesh.rotation.z = elapsedTime * 0.35;
+          // 2. 文字框輕微上下浮動
+          bannerMesh.position.y = baseBannerY + Math.sin(elapsedTime * 2.0) * 0.015;
 
-          // 3. 3D 金箔靈子緩緩上升漂浮
-          const posAttr = goldParticles.geometry.attributes.position;
-          for (let i = 0; i < particleCount; i++) {
-            let z = posAttr.getZ(i) + 0.0012;
-            if (z > 0.30) z = 0.02;
-            posAttr.setZ(i, z);
-          }
-          posAttr.needsUpdate = true;
-          goldParticles.rotation.z = Math.sin(elapsedTime * 0.4) * 0.15;
-
-          // 4. 御札文字框立體呼吸浮動
-          bannerMesh.position.y = baseBannerY + Math.sin(elapsedTime * 2.0) * 0.018;
-          bannerMesh.position.z = 0.14 + Math.cos(elapsedTime * 1.6) * 0.012;
-          bannerMesh.rotation.x = Math.sin(elapsedTime * 1.5) * 0.06;
-
-          // 5. 影片動態真實比例校正 + 3D 空中懸浮搖擺
+          // 3. 影片比例校正、第三重無限循環檢查、3D 空中自然晃動
           let vStatusText = "";
           activeVideoObjects.forEach(vo => {
-            vo.material.uniforms.uTime.value = elapsedTime;
+            const v = vo.video;
 
-            if (vo.video.readyState >= vo.video.HAVE_CURRENT_DATA) {
+            // 【第三重循環保障】：若影片接近結尾或意外暫停，立即歸零無縫重播
+            if (isTargetLocked) {
+              if (v.duration > 0 && v.currentTime >= v.duration - 0.05) {
+                v.currentTime = 0;
+                v.play().catch(() => {});
+              } else if (v.paused || v.ended) {
+                if (v.ended) v.currentTime = 0;
+                v.play().catch(() => {});
+              }
+            }
+
+            if (v.readyState >= v.HAVE_CURRENT_DATA) {
               vo.texture.needsUpdate = true;
 
-              // 自動偵測影片真實寬高比並校正 Mesh，徹底消除橫向拉大變形
-              if (!vo.aspectCalibrated && vo.video.videoWidth > 0 && vo.video.videoHeight > 0) {
-                const aspect = vo.video.videoWidth / vo.video.videoHeight;
+              // 自動依影片真實寬高比設定平面，防止左右拉大變形
+              if (!vo.aspectCalibrated && v.videoWidth > 0 && v.videoHeight > 0) {
+                const aspect = v.videoWidth / v.videoHeight;
                 vo.mesh.scale.set(aspect, 1, 1);
                 vo.aspectCalibrated = true;
               }
             }
 
-            // 讓影片在空中產生真實 3D 懸浮感 (Y軸上下浮動 + Z軸前後呼吸 + 微幅立體偏擺)
+            // 讓影片中的角色在空中呈現穩定的 3D 懸浮感
             const t = elapsedTime + vo.phase;
-            vo.mesh.position.y = vo.baseY + Math.sin(t * 2.2) * 0.025;
-            vo.mesh.position.z = vo.baseZ + Math.cos(t * 1.8) * 0.025;
-            vo.mesh.rotation.y = vo.baseRY + Math.sin(t * 1.4) * 0.12;
-            vo.mesh.rotation.x = Math.cos(t * 1.2) * 0.08;
+            vo.mesh.position.y = vo.baseY + Math.sin(t * 2.2) * 0.02;
+            vo.mesh.position.z = vo.baseZ + Math.cos(t * 1.6) * 0.018;
+            vo.mesh.rotation.y = vo.baseRY + Math.sin(t * 1.4) * 0.08;
 
-            // 底部結界底座隨角色高度反向縮放，強化大腦對「離地高度」的 3D 錯覺
-            const shadowScale = 1.0 - Math.cos(t * 1.8) * 0.15;
-            vo.shadowSeal.scale.set(shadowScale, shadowScale, 1);
-            vo.shadowSeal.rotation.z = -elapsedTime * 0.8;
-
-            vStatusText += `靈像${vo.id}: ${vo.video.paused ? '暫停' : '顯現中'} (${vo.video.videoWidth}x${vo.video.videoHeight} | 比例已校正)\n`;
+            vStatusText += `影片${vo.id}: ${v.paused ? '暫停' : '循環播放中'} (${v.currentTime.toFixed(1)}s / ${v.videoWidth}x${v.videoHeight})\n`;
           });
 
           debugPanel.innerText =
-            `[退魔結界診斷] 狀態: ${isTargetLocked ? '已鎖定 (SLERP防震開啟)' : '尋覓中'}\n` +
-            `景深高度 Z: 角色 0.16 / 看板 0.14 / 結界 0.01\n` +
+            `[診斷面板] 狀態: ${isTargetLocked ? '已鎖定 (防震穩定中)' : '搜尋中'}\n` +
             (vStatusText || "無有效影片檔案");
 
           renderer.render(scene, camera);
         });
 
         // =========================================================
-        // G. 點擊與觸控跳轉判定
+        // E. 點擊與觸控跳轉判定
         // =========================================================
         const raycaster = new THREE.Raycaster();
         const pointer = new THREE.Vector2();
