@@ -111,7 +111,6 @@
     const validVideoItems = [];
     let validImageLayer = null;
 
-    // 網址正規化：自動補齊 https://，若空白則回傳空字串
     function normalizeUrl(rawUrl) {
       if (!rawUrl || typeof rawUrl !== 'string') return '';
       const trimmed = rawUrl.trim();
@@ -190,10 +189,15 @@
           THREE.ColorManagement.enabled = false;
         }
 
-        statusMsg.innerText = "⏳ 3/3 正在檢查已發布的媒體資產...";
+        statusMsg.innerText = "⏳ 3/3 正在檢查已設定的媒體資產...";
+        preloadPool.innerHTML = '';
+
+        // 僅載入 config.videos 中明確保留且啟用的影片
         if (config.videos && Array.isArray(config.videos)) {
           for (let i = 0; i < config.videos.length; i++) {
             const vConf = config.videos[i];
+            if (!vConf || vConf.enabled === false || !vConf.url) continue;
+
             const exists = await checkAssetExists(vConf.url);
             if (exists) {
               const v = document.createElement('video');
@@ -220,6 +224,7 @@
           }
         }
 
+        // 檢查 AR 互動圖片是否啟用且存在
         if (config.imageLayer && config.imageLayer.enabled && config.imageLayer.url) {
           const imgExists = await checkAssetExists(config.imageLayer.url);
           if (imgExists) {
@@ -228,7 +233,7 @@
         }
 
         const imgInfo = validImageLayer ? ` + 1 張互動圖片` : "";
-        statusMsg.innerText = `✅ 準備就緒（偵測到 ${validVideoItems.length} 支影片${imgInfo}）\n請將鏡頭對準實體圖卡`;
+        statusMsg.innerText = `✅ 準備就緒（已載入 ${validVideoItems.length} 支影片${imgInfo}）\n請將鏡頭對準實體圖卡`;
         startBtn.innerText = "點擊啟動 AR 鏡頭";
         startBtn.disabled = false;
         startBtn.onclick = startAR;
@@ -269,37 +274,39 @@
         const anchor = mindarThree.addAnchor(0);
         const defaultRedirectUrl = normalizeUrl(config.redirectUrl) || "https://example.com";
 
-        const hotspotClickables = []; // 第一優先：圖片透明點位
-        const generalClickables = []; // 第二優先：浮空文字框、影片、圖片本體
+        const hotspotClickables = [];
+        const generalClickables = [];
         let interactiveImageMesh = null;
 
         // =========================================================
-        // A. 簡潔浮空文字看板
+        // A. 浮空文字看板 (支援於後台關閉/刪除)
         // =========================================================
-        const bannerTexture = createCleanBannerTexture(config.bannerText);
-        const bannerW = 1.3, bannerH = 0.32;
-        const bannerMesh = new THREE.Mesh(
-          new THREE.PlaneGeometry(bannerW, bannerH),
-          new THREE.MeshBasicMaterial({
-            map: bannerTexture,
-            transparent: true,
-            side: THREE.DoubleSide,
-            depthWrite: false
-          })
-        );
-        const baseBannerY = (config.bannerPosY !== undefined) ? Number(config.bannerPosY) : 0.65;
-        bannerMesh.position.set(0, baseBannerY, 0.12);
-        bannerMesh.renderOrder = 20;
-        bannerMesh.userData = {
-          targetUrl: defaultRedirectUrl,
-          halfW: bannerW / 2,
-          halfH: bannerH / 2
-        };
-        anchor.group.add(bannerMesh);
-        generalClickables.push(bannerMesh);
+        if (config.bannerEnabled !== false && config.bannerText && config.bannerText.trim() !== "") {
+          const bannerTexture = createCleanBannerTexture(config.bannerText);
+          const bannerW = 1.3, bannerH = 0.32;
+          const bannerMesh = new THREE.Mesh(
+            new THREE.PlaneGeometry(bannerW, bannerH),
+            new THREE.MeshBasicMaterial({
+              map: bannerTexture,
+              transparent: true,
+              side: THREE.DoubleSide,
+              depthWrite: false
+            })
+          );
+          const baseBannerY = (config.bannerPosY !== undefined) ? Number(config.bannerPosY) : 0.65;
+          bannerMesh.position.set(0, baseBannerY, 0.12);
+          bannerMesh.renderOrder = 20;
+          bannerMesh.userData = {
+            targetUrl: defaultRedirectUrl,
+            halfW: bannerW / 2,
+            halfH: bannerH / 2
+          };
+          anchor.group.add(bannerMesh);
+          generalClickables.push(bannerMesh);
+        }
 
         // =========================================================
-        // B. 純淨去背影片平面
+        // B. 零殘影去背影片平面 (加入 discard 徹底消除半透明背景殘影)
         // =========================================================
         const vShader = `
           varying vec2 vUv;
@@ -318,7 +325,11 @@
           void main() {
             vec4 col = texture2D(textureMap, vUv);
             float diff = length(col.rgb - keyColor);
-            float alpha = smoothstep(similarity, similarity + smoothness, diff);
+            float alpha = smoothstep(similarity, similarity + max(smoothness, 0.001), diff);
+
+            // 【關鍵消除殘影】：透明度低於 0.08 的背景像素直接由 GPU 捨棄，絕不留任何殘影方框
+            if (alpha < 0.08) discard;
+
             gl_FragColor = vec4(col.rgb, col.a * alpha);
           }
         `;
@@ -334,6 +345,9 @@
           vTexture.minFilter = THREE.LinearFilter;
           vTexture.magFilter = THREE.LinearFilter;
 
+          const scaleVal = Number(vConfig.scale || 1.0);
+          const planeH = basePlaneHeight * scaleVal;
+
           const mat = new THREE.ShaderMaterial({
             uniforms: {
               textureMap: { value: vTexture },
@@ -348,7 +362,7 @@
             depthWrite: false
           });
 
-          const mesh = new THREE.Mesh(new THREE.PlaneGeometry(basePlaneHeight, basePlaneHeight), mat);
+          const mesh = new THREE.Mesh(new THREE.PlaneGeometry(planeH, planeH), mat);
 
           const baseX = Number(vConfig.px || 0);
           const baseY = Number(vConfig.py || 0);
@@ -361,8 +375,8 @@
           mesh.renderOrder = 10 + idx;
           mesh.userData = {
             targetUrl: normalizeUrl(vConfig.linkUrl) || defaultRedirectUrl,
-            halfW: basePlaneHeight / 2,
-            halfH: basePlaneHeight / 2
+            halfW: planeH / 2,
+            halfH: planeH / 2
           };
 
           anchor.group.add(mesh);
@@ -372,6 +386,7 @@
             video: v,
             texture: vTexture,
             mesh: mesh,
+            planeH: planeH,
             aspectCalibrated: false
           });
         });
@@ -419,7 +434,6 @@
             interactiveImageMesh = imgMesh;
             generalClickables.push(imgMesh);
 
-            // 建立全透明點位感應區 (opacity: 0，若點位未填網址則自動保底使用預設連結)
             const hotspots = Array.isArray(validImageLayer.hotspots) ? validImageLayer.hotspots : [];
             hotspots.forEach((spot) => {
               const spotTargetUrl = normalizeUrl(spot.url) || defaultRedirectUrl;
@@ -454,7 +468,7 @@
         }
 
         // =========================================================
-        // D. 追蹤狀態與防手震記憶矩陣
+        // D. 追蹤狀態事件
         // =========================================================
         let isTargetLocked = false;
         let lastLockedTime = 0;
@@ -482,7 +496,7 @@
         hud.style.display = 'block';
 
         // =========================================================
-        // E. 螢幕旋轉校正 (保留 MindAR 原生投影矩陣並同步逆矩陣)
+        // E. 螢幕旋轉校正
         // =========================================================
         window.addEventListener('orientationchange', () => {
           setTimeout(() => window.dispatchEvent(new Event('resize')), 150);
@@ -490,7 +504,7 @@
         });
 
         // =========================================================
-        // F. 渲染迴圈：無限循環巡檢、比例校正與記憶最後鎖定矩陣
+        // F. 渲染迴圈：無限循環巡檢與真實比例校正
         // =========================================================
         renderer.setAnimationLoop(() => {
           if (isTargetLocked) {
@@ -517,6 +531,7 @@
               if (!vo.aspectCalibrated && v.videoWidth > 0 && v.videoHeight > 0) {
                 const aspect = v.videoWidth / v.videoHeight;
                 vo.mesh.scale.set(aspect, 1, 1);
+                vo.mesh.userData.halfW = (vo.planeH * aspect) / 2;
                 vo.aspectCalibrated = true;
               }
             }
@@ -526,13 +541,12 @@
         });
 
         // =========================================================
-        // G. 雙引擎點擊跳轉判定 (3D Raycaster + 2D 螢幕投影邊界雙重檢測)
+        // G. 雙引擎點擊跳轉判定 (3D Raycaster + 2D 螢幕投影邊界)
         // =========================================================
         const raycaster = new THREE.Raycaster();
         const pointer = new THREE.Vector2();
         let isNavigating = false;
 
-        // 輔助函式：檢查螢幕點擊座標 (ndcX, ndcY) 是否落在 3D 平面投影至螢幕的矩形範圍內
         function isPointInProjectedMesh(mesh, ndcX, ndcY, pad = 0.06) {
           const hw = mesh.userData.halfW || 0.3;
           const hh = mesh.userData.halfH || 0.2;
@@ -572,23 +586,19 @@
         }
 
         function handleScreenTap(clientX, clientY) {
-          // 允許目前鎖定中，或點擊瞬間因微震剛脫鎖 2.5 秒內的點擊
           const recentlyLocked = (performance.now() - lastLockedTime) < 2500;
           if (!isTargetLocked && !recentlyLocked) return;
 
-          // 1. 若因手指點擊微震短暫脫鎖，暫時還原最後一次鎖定的矩陣供碰撞計算
           if (!isTargetLocked && recentlyLocked) {
             anchor.group.matrix.copy(lastValidAnchorMatrix);
           }
 
-          // 2. 【核心修復】：強制更新相機逆投影矩陣與錨點世界座標矩陣
           scene.updateMatrixWorld(true);
           anchor.group.updateMatrixWorld(true);
           camera.updateMatrixWorld(true);
           camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
           camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
 
-          // 3. 【核心修復】：以畫布真實邊界 (getBoundingClientRect) 計算點擊座標
           const rect = renderer.domElement.getBoundingClientRect();
           if (rect.width === 0 || rect.height === 0) return;
 
@@ -598,9 +608,7 @@
           pointer.set(ndcX, ndcY);
           raycaster.setFromCamera(pointer, camera);
 
-          // ---------------------------------------------------------
-          // 第一優先：檢查圖片上的透明點位 (3D Raycaster + 2D 投影距離)
-          // ---------------------------------------------------------
+          // 第一優先：圖片透明點位
           if (hotspotClickables.length > 0) {
             const hsHits = raycaster.intersectObjects(hotspotClickables, true);
             if (hsHits.length > 0) {
@@ -608,7 +616,6 @@
               return;
             }
 
-            // 2D 螢幕投影檢查：找出距離手指點擊處最近的透明點位
             let closestHs = null;
             let minScreenDist = 0.22;
             hotspotClickables.forEach(hsMesh => {
@@ -625,9 +632,7 @@
             }
           }
 
-          // ---------------------------------------------------------
-          // 第二優先：若點中互動圖片平面，透過 UV 座標比對點位或跳轉預設網址
-          // ---------------------------------------------------------
+          // 第二優先：互動圖片 UV 比對
           if (interactiveImageMesh) {
             const imgHits = raycaster.intersectObject(interactiveImageMesh, true);
             if (imgHits.length > 0 && imgHits[0].uv) {
@@ -650,9 +655,7 @@
             }
           }
 
-          // ---------------------------------------------------------
-          // 第三優先：檢查影片與浮空文字框 (3D Raycaster + 2D 投影矩形保底)
-          // ---------------------------------------------------------
+          // 第三優先：影片與浮空文字框
           const generalHits = raycaster.intersectObjects(generalClickables, true);
           if (generalHits.length > 0) {
             executeNavigation(generalHits[0].object.userData?.targetUrl);
@@ -668,7 +671,6 @@
           }
         }
 
-        // 支援手機觸控與滑鼠點擊
         let downX = 0, downY = 0;
         window.addEventListener('pointerdown', (e) => {
           downX = e.clientX;
