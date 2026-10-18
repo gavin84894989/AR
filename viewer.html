@@ -3,6 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <!-- 防快取標籤 -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>AR 觀看端</title>
 
   <!-- 官方同源模組映射 (Three.js r160 + MindAR 1.2.5) -->
@@ -35,7 +39,7 @@
     #ar-container video { z-index: 1 !important; }
     #ar-container canvas { z-index: 2 !important; }
 
-    /* 隱藏預載影片池 (確保手機硬體持續解碼) */
+    /* 隱藏預載影片池 */
     #video-preload-pool {
       position: fixed; bottom: 0; right: 0;
       width: 1px; height: 1px; opacity: 0.01;
@@ -51,16 +55,7 @@
       display: none; pointer-events: none; white-space: nowrap;
     }
 
-    /* 左下角即時診斷面板 */
-    #debug-panel {
-      position: fixed; bottom: 10px; left: 10px;
-      z-index: 1000; padding: 8px 12px; border-radius: 8px;
-      font-size: 11px; line-height: 1.4; color: #00ffcc;
-      background: rgba(0, 0, 0, 0.7); pointer-events: none;
-      max-width: 90vw; white-space: pre-wrap; display: none;
-    }
-
-    /* 啟動遮罩 (簡潔原版風格) */
+    /* 啟動遮罩 */
     #overlay {
       position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
       background: rgba(15, 23, 42, 0.95); display: flex; flex-direction: column;
@@ -85,7 +80,6 @@
 <body>
 
   <div id="tracker-hud">🟡 正在尋找目標圖卡...</div>
-  <div id="debug-panel">初始化中...</div>
 
   <div id="overlay">
     <h2>WebAR 互動體驗</h2>
@@ -101,7 +95,6 @@
     const overlay = document.getElementById('overlay');
     const statusMsg = document.getElementById('status-msg');
     const hud = document.getElementById('tracker-hud');
-    const debugPanel = document.getElementById('debug-panel');
     const preloadPool = document.getElementById('video-preload-pool');
 
     let THREE = null;
@@ -188,18 +181,18 @@
               const v = document.createElement('video');
               v.src = `${vConf.url}?t=${Date.now()}`;
 
-              // 【第一重循環保障】：標準屬性與行動端內嵌設定
+              // 循環與內嵌播放屬性設定
               v.loop = true;
               v.muted = true;
               v.playsInline = true;
-              v. setAttribute('loop', '');
+              v.setAttribute('loop', '');
               v.setAttribute('muted', '');
               v.setAttribute('playsinline', '');
               v.setAttribute('webkit-playsinline', '');
               v.setAttribute('preload', 'auto');
               v.crossOrigin = "anonymous";
 
-              // 【第二重循環保障】：監聽 ended 事件，播完立刻歸零重播
+              // 監聽 ended 事件確保萬無一失
               v.addEventListener('ended', () => {
                 v.currentTime = 0;
                 v.play().catch(() => {});
@@ -237,32 +230,26 @@
       try {
         const container = document.querySelector("#ar-container");
 
-        // 啟用底層抗抖動濾波參數
         const mindarThree = new MindARThree({
           container: container,
           imageTargetSrc: `./targets.mind?t=${Date.now()}`,
           uiLoading: "no",
           uiScanning: "no",
-          filterMinCF: 0.0001,
-          filterBeta: 0.001,
-          missTolerance: 8,
-          warmupTolerance: 3
+          filterMinCF: 0.001,
+          filterBeta: 0.01,
+          missTolerance: 5,
+          warmupTolerance: 2
         });
 
         const { renderer, scene, camera } = mindarThree;
         renderer.setClearColor(0x000000, 0);
 
-        const rawAnchor = mindarThree.addAnchor(0);
-
-        // 獨立平滑防手震群組 (過濾手機移動時的晃動與變形)
-        const smoothGroup = new THREE.Group();
-        smoothGroup.visible = false;
-        scene.add(smoothGroup);
-
+        // 直接使用原生 anchor，徹底根除多次移開圖卡重對準時的累計歪斜問題
+        const anchor = mindarThree.addAnchor(0);
         const clickables = [];
 
         // =========================================================
-        // A. 簡潔浮空文字看板 (原版圓角黑底藍框，無額外雕飾)
+        // A. 簡潔浮空文字看板 (直接掛載於原生 anchor.group)
         // =========================================================
         const bannerTexture = createCleanBannerTexture(config.bannerText);
         const bannerMesh = new THREE.Mesh(
@@ -277,11 +264,11 @@
         const baseBannerY = (config.bannerPosY !== undefined) ? Number(config.bannerPosY) : 0.65;
         bannerMesh.position.set(0, baseBannerY, 0.12);
         bannerMesh.renderOrder = 20;
-        smoothGroup.add(bannerMesh);
+        anchor.group.add(bannerMesh);
         clickables.push(bannerMesh);
 
         // =========================================================
-        // B. 純淨去背影片平面 (無額外邊框、無濾鏡、自動校正真實比例)
+        // B. 純淨去背影片平面
         // =========================================================
         const vShader = `
           varying vec2 vUv;
@@ -334,7 +321,7 @@
 
           const baseX = Number(vConfig.px || 0);
           const baseY = Number(vConfig.py || 0);
-          const baseZ = 0.15 + idx * 0.02; // 懸浮於圖卡上方空中，創造立體感
+          const baseZ = 0.15 + idx * 0.02;
           const baseRY = THREE.MathUtils.degToRad(Number(vConfig.ry || 0));
           const baseRZ = THREE.MathUtils.degToRad(Number(vConfig.rz || 0));
 
@@ -342,35 +329,23 @@
           mesh.rotation.set(0, baseRY, baseRZ);
           mesh.renderOrder = 10 + idx;
 
-          smoothGroup.add(mesh);
+          anchor.group.add(mesh);
           clickables.push(mesh);
 
           activeVideoObjects.push({
-            id: item.index,
             video: v,
             texture: vTexture,
             mesh: mesh,
-            baseX, baseY, baseZ, baseRY, baseRZ,
-            aspectCalibrated: false,
-            phase: idx * 1.8
+            aspectCalibrated: false
           });
         });
 
         // =========================================================
-        // C. 追蹤狀態與防手震平滑變數 (LERP / SLERP)
+        // C. 追蹤狀態事件
         // =========================================================
         let isTargetLocked = false;
-        let hasInitializedPose = false;
 
-        const targetPos = new THREE.Vector3();
-        const targetQuat = new THREE.Quaternion();
-        const targetScale = new THREE.Vector3();
-
-        const smoothPos = new THREE.Vector3();
-        const smoothQuat = new THREE.Quaternion();
-        const smoothScale = new THREE.Vector3();
-
-        rawAnchor.onTargetFound = () => {
+        anchor.onTargetFound = () => {
           isTargetLocked = true;
           hud.style.background = "rgba(40, 167, 69, 0.9)";
           hud.innerHTML = "🟢 目標已鎖定！";
@@ -379,10 +354,8 @@
           });
         };
 
-        rawAnchor.onTargetLost = () => {
+        anchor.onTargetLost = () => {
           isTargetLocked = false;
-          hasInitializedPose = false;
-          smoothGroup.visible = false;
           hud.style.background = "rgba(0, 0, 0, 0.75)";
           hud.innerHTML = "🟡 正在尋找目標圖卡...";
         };
@@ -391,47 +364,26 @@
 
         overlay.style.display = 'none';
         hud.style.display = 'block';
-        debugPanel.style.display = 'block';
 
         // =========================================================
-        // D. 渲染迴圈：防手震插值 + 第三重無限循環巡檢 + 3D 空中浮動
+        // D. 螢幕旋轉即時校正處理 (修復手機橫直轉動時歪斜的問題)
         // =========================================================
-        const clock = new THREE.Clock();
+        window.addEventListener('resize', () => {
+          const width = window.innerWidth;
+          const height = window.innerHeight;
+          camera.aspect = width / height;
+          camera.updateProjectionMatrix();
+          renderer.setSize(width, height);
+        });
 
+        // =========================================================
+        // E. 渲染迴圈：無限循環巡檢與紋理更新
+        // =========================================================
         renderer.setAnimationLoop(() => {
-          const elapsedTime = clock.getElapsedTime();
-
-          // 1. 雙重阻尼防手震插值 (抑制手機移動造成的拉扯與晃動)
-          if (isTargetLocked) {
-            rawAnchor.group.matrix.decompose(targetPos, targetQuat, targetScale);
-
-            if (targetScale.x > 0.0001) {
-              if (!hasInitializedPose) {
-                smoothPos.copy(targetPos);
-                smoothQuat.copy(targetQuat);
-                smoothScale.copy(targetScale);
-                hasInitializedPose = true;
-              } else {
-                smoothPos.lerp(targetPos, 0.22);
-                smoothQuat.slerp(targetQuat, 0.12);
-                smoothScale.lerp(targetScale, 0.22);
-              }
-              smoothGroup.visible = true;
-              smoothGroup.position.copy(smoothPos);
-              smoothGroup.quaternion.copy(smoothQuat);
-              smoothGroup.scale.copy(smoothScale);
-            }
-          }
-
-          // 2. 文字框輕微上下浮動
-          bannerMesh.position.y = baseBannerY + Math.sin(elapsedTime * 2.0) * 0.015;
-
-          // 3. 影片比例校正、第三重無限循環檢查、3D 空中自然晃動
-          let vStatusText = "";
           activeVideoObjects.forEach(vo => {
             const v = vo.video;
 
-            // 【第三重循環保障】：若影片接近結尾或意外暫停，立即歸零無縫重播
+            // 無限循環巡檢防線
             if (isTargetLocked) {
               if (v.duration > 0 && v.currentTime >= v.duration - 0.05) {
                 v.currentTime = 0;
@@ -445,32 +397,20 @@
             if (v.readyState >= v.HAVE_CURRENT_DATA) {
               vo.texture.needsUpdate = true;
 
-              // 自動依影片真實寬高比設定平面，防止左右拉大變形
+              // 自動校正真實長寬比，防止影像變形
               if (!vo.aspectCalibrated && v.videoWidth > 0 && v.videoHeight > 0) {
                 const aspect = v.videoWidth / v.videoHeight;
                 vo.mesh.scale.set(aspect, 1, 1);
                 vo.aspectCalibrated = true;
               }
             }
-
-            // 讓影片中的角色在空中呈現穩定的 3D 懸浮感
-            const t = elapsedTime + vo.phase;
-            vo.mesh.position.y = vo.baseY + Math.sin(t * 2.2) * 0.02;
-            vo.mesh.position.z = vo.baseZ + Math.cos(t * 1.6) * 0.018;
-            vo.mesh.rotation.y = vo.baseRY + Math.sin(t * 1.4) * 0.08;
-
-            vStatusText += `影片${vo.id}: ${v.paused ? '暫停' : '循環播放中'} (${v.currentTime.toFixed(1)}s / ${v.videoWidth}x${v.videoHeight})\n`;
           });
-
-          debugPanel.innerText =
-            `[診斷面板] 狀態: ${isTargetLocked ? '已鎖定 (防震穩定中)' : '搜尋中'}\n` +
-            (vStatusText || "無有效影片檔案");
 
           renderer.render(scene, camera);
         });
 
         // =========================================================
-        // E. 點擊與觸控跳轉判定
+        // F. 點擊與觸控跳轉判定
         // =========================================================
         const raycaster = new THREE.Raycaster();
         const pointer = new THREE.Vector2();
