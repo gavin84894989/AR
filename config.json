@@ -1,16 +1,16 @@
 {
   "redirectUrl": "https://google.com",
   "bannerText": "👉 點擊任意影片前往官方網站！",
-  "bannerPosY": 0.65,
+  "bannerPosY": 0.75,
   "videos": [
     {
       "url": "./videos/video_0.mp4",
-      "keyColor": "#3fc648",
-      "similarity": 0.39,
-      "smoothness": 0,
-      "px": -0.6,
+      "keyColor": "#00ff55",
+      "similarity": 0.42,
+      "smoothness": 0.14,
+      "px": -0.4,
       "py": 0,
-      "ry": -2,
+      "ry": 0,
       "rz": 0
     },
     {
@@ -37,32 +37,32 @@
   "imageLayer": {
     "enabled": true,
     "url": "./images/ar_overlay.png",
-    "px": 0,
+    "px": -0.05,
     "py": 0,
     "pz": 0.1,
-    "scale": 1.5,
-    "ry": -4,
+    "scale": 1.55,
+    "ry": 1,
     "rz": 0,
     "hotspots": [
       {
-        "id": 1792314810760,
+        "id": 1792335174320,
         "label": "點位 1",
-        "uvX": 0.5641,
-        "uvY": 0.2689,
+        "uvX": 0.4981,
+        "uvY": 0.4862,
         "url": "https://youtu.be/BlrHaedOOUU"
       },
       {
-        "id": 1792314844511,
+        "id": 1792335178656,
         "label": "點位 2",
-        "uvX": 0.4092,
-        "uvY": 0.2647,
+        "uvX": 0.4725,
+        "uvY": 0.5608,
         "url": "https://youtu.be/BlrHaedOOUU"
       },
       {
-        "id": 1792314849517,
+        "id": 1792335181916,
         "label": "點位 3",
-        "uvX": 0.4895,
-        "uvY": 0.4642,
+        "uvX": 0.4839,
+        "uvY": 0.6354,
         "url": "https://youtu.be/BlrHaedOOUU"
       }
     ]
