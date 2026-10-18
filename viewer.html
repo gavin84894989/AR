@@ -98,12 +98,16 @@
   <div id="ar-container"></div>
   <div id="video-preload-pool"></div>
 
+  <!-- 專用於開啟新分頁的隱藏實體連結標籤 (避免手機攔截彈窗並完整保留原掃描頁) -->
+  <a id="new-tab-launcher" href="#" target="_blank" rel="noopener noreferrer" style="display:none;"></a>
+
   <script>
     const startBtn = document.getElementById('start-btn');
     const overlay = document.getElementById('overlay');
     const statusMsg = document.getElementById('status-msg');
     const hud = document.getElementById('tracker-hud');
     const preloadPool = document.getElementById('video-preload-pool');
+    const newTabLauncher = document.getElementById('new-tab-launcher');
 
     let THREE = null;
     let MindARThree = null;
@@ -192,7 +196,6 @@
         statusMsg.innerText = "⏳ 3/3 正在檢查已設定的媒體資產...";
         preloadPool.innerHTML = '';
 
-        // 僅載入 config.videos 中明確保留且啟用的影片
         if (config.videos && Array.isArray(config.videos)) {
           for (let i = 0; i < config.videos.length; i++) {
             const vConf = config.videos[i];
@@ -224,7 +227,6 @@
           }
         }
 
-        // 檢查 AR 互動圖片是否啟用且存在
         if (config.imageLayer && config.imageLayer.enabled && config.imageLayer.url) {
           const imgExists = await checkAssetExists(config.imageLayer.url);
           if (imgExists) {
@@ -279,7 +281,7 @@
         let interactiveImageMesh = null;
 
         // =========================================================
-        // A. 浮空文字看板 (支援於後台關閉/刪除)
+        // A. 浮空文字看板
         // =========================================================
         if (config.bannerEnabled !== false && config.bannerText && config.bannerText.trim() !== "") {
           const bannerTexture = createCleanBannerTexture(config.bannerText);
@@ -306,7 +308,7 @@
         }
 
         // =========================================================
-        // B. 零殘影去背影片平面 (加入 discard 徹底消除半透明背景殘影)
+        // B. 零殘影去背影片平面
         // =========================================================
         const vShader = `
           varying vec2 vUv;
@@ -326,10 +328,7 @@
             vec4 col = texture2D(textureMap, vUv);
             float diff = length(col.rgb - keyColor);
             float alpha = smoothstep(similarity, similarity + max(smoothness, 0.001), diff);
-
-            // 【關鍵消除殘影】：透明度低於 0.08 的背景像素直接由 GPU 捨棄，絕不留任何殘影方框
             if (alpha < 0.08) discard;
-
             gl_FragColor = vec4(col.rgb, col.a * alpha);
           }
         `;
@@ -496,12 +495,36 @@
         hud.style.display = 'block';
 
         // =========================================================
-        // E. 螢幕旋轉校正
+        // E. 螢幕旋轉與「從新分頁返回時」自動喚醒相機機制
         // =========================================================
         window.addEventListener('orientationchange', () => {
           setTimeout(() => window.dispatchEvent(new Event('resize')), 150);
           setTimeout(() => window.dispatchEvent(new Event('resize')), 350);
         });
+
+        let isNavigating = false;
+
+        // 當使用者關閉新分頁或切回本掃描頁時，自動恢復相機串流與影片播放
+        function resumeARSessionOnReturn() {
+          isNavigating = false;
+          const camVideo = container.querySelector('video');
+          if (camVideo && camVideo.paused) {
+            camVideo.play().catch(() => {});
+          }
+          validVideoItems.forEach(item => {
+            if (item.element.paused) item.element.play().catch(() => {});
+          });
+          hud.style.background = isTargetLocked ? "rgba(40, 167, 69, 0.9)" : "rgba(0, 0, 0, 0.75)";
+          hud.innerHTML = isTargetLocked ? "🟢 目標已鎖定！" : "🟡 正在尋找目標圖卡...";
+        }
+
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') {
+            resumeARSessionOnReturn();
+          }
+        });
+        window.addEventListener('focus', resumeARSessionOnReturn);
+        window.addEventListener('pageshow', resumeARSessionOnReturn);
 
         // =========================================================
         // F. 渲染迴圈：無限循環巡檢與真實比例校正
@@ -541,11 +564,10 @@
         });
 
         // =========================================================
-        // G. 雙引擎點擊跳轉判定 (3D Raycaster + 2D 螢幕投影邊界)
+        // G. 雙引擎點擊判定 + 強制以「新分頁 (_blank)」開啟連結
         // =========================================================
         const raycaster = new THREE.Raycaster();
         const pointer = new THREE.Vector2();
-        let isNavigating = false;
 
         function isPointInProjectedMesh(mesh, ndcX, ndcY, pad = 0.06) {
           const hw = mesh.userData.halfW || 0.3;
@@ -573,16 +595,25 @@
           );
         }
 
-        function executeNavigation(targetUrl) {
+        // 【核心修改】：使用 _blank 實體錨點開啟新分頁，絕不離開原 AR 掃描頁
+        function executeNavigationInNewTab(targetUrl) {
           const finalUrl = normalizeUrl(targetUrl) || defaultRedirectUrl;
           if (!finalUrl || isNavigating) return;
           isNavigating = true;
 
           hud.style.background = "rgba(0, 122, 255, 0.95)";
-          hud.innerHTML = "🔗 正在前往連結...";
+          hud.innerHTML = "🔗 已於新分頁開啟連結";
 
-          setTimeout(() => { isNavigating = false; }, 1200);
-          window.location.assign(finalUrl);
+          // 透過隱藏的 <a target="_blank" rel="noopener noreferrer"> 同步觸發新分頁
+          newTabLauncher.href = finalUrl;
+          newTabLauncher.click();
+
+          // 600ms 後解除點擊鎖並恢復提示燈，方便返回時直接點擊下一個點位
+          setTimeout(() => {
+            isNavigating = false;
+            hud.style.background = isTargetLocked ? "rgba(40, 167, 69, 0.9)" : "rgba(0, 0, 0, 0.75)";
+            hud.innerHTML = isTargetLocked ? "🟢 目標已鎖定！" : "🟡 正在尋找目標圖卡...";
+          }, 600);
         }
 
         function handleScreenTap(clientX, clientY) {
@@ -612,7 +643,7 @@
           if (hotspotClickables.length > 0) {
             const hsHits = raycaster.intersectObjects(hotspotClickables, true);
             if (hsHits.length > 0) {
-              executeNavigation(hsHits[0].object.userData?.targetUrl);
+              executeNavigationInNewTab(hsHits[0].object.userData?.targetUrl);
               return;
             }
 
@@ -627,7 +658,7 @@
               }
             });
             if (closestHs) {
-              executeNavigation(closestHs.userData?.targetUrl);
+              executeNavigationInNewTab(closestHs.userData?.targetUrl);
               return;
             }
           }
@@ -650,7 +681,7 @@
                 }
               });
 
-              executeNavigation(bestSpotUrl || defaultRedirectUrl);
+              executeNavigationInNewTab(bestSpotUrl || defaultRedirectUrl);
               return;
             }
           }
@@ -658,35 +689,31 @@
           // 第三優先：影片與浮空文字框
           const generalHits = raycaster.intersectObjects(generalClickables, true);
           if (generalHits.length > 0) {
-            executeNavigation(generalHits[0].object.userData?.targetUrl);
+            executeNavigationInNewTab(generalHits[0].object.userData?.targetUrl);
             return;
           }
 
           for (let i = 0; i < generalClickables.length; i++) {
             const mesh = generalClickables[i];
             if (isPointInProjectedMesh(mesh, ndcX, ndcY, 0.08)) {
-              executeNavigation(mesh.userData?.targetUrl);
+              executeNavigationInNewTab(mesh.userData?.targetUrl);
               return;
             }
           }
         }
 
+        // 記錄手指按下位置以過濾滑動，並統一於原生 click 事件中觸發新分頁開啟
         let downX = 0, downY = 0;
         window.addEventListener('pointerdown', (e) => {
           downX = e.clientX;
           downY = e.clientY;
         }, { passive: true });
 
-        window.addEventListener('pointerup', (e) => {
-          if (overlay.style.display !== 'none') return;
-          if (Math.hypot(e.clientX - downX, e.clientY - downY) < 35) {
-            handleScreenTap(e.clientX, e.clientY);
-          }
-        });
-
         window.addEventListener('click', (e) => {
           if (overlay.style.display !== 'none') return;
-          handleScreenTap(e.clientX, e.clientY);
+          if (Math.hypot(e.clientX - downX, e.clientY - downY) < 40) {
+            handleScreenTap(e.clientX, e.clientY);
+          }
         });
 
       } catch (err) {
