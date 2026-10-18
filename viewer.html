@@ -101,6 +101,7 @@
     let MindARThree = null;
     let config = null;
     const validVideoItems = [];
+    let validImageLayer = null;
 
     function checkInAppBrowser() {
       const ua = navigator.userAgent || navigator.vendor || window.opera;
@@ -113,7 +114,7 @@
       return false;
     }
 
-    async function checkVideoExists(url) {
+    async function checkAssetExists(url) {
       if (!url) return false;
       try {
         const res = await fetch(`${url}?t=${Date.now()}`, { method: 'HEAD' });
@@ -154,6 +155,56 @@
       return tex;
     }
 
+    // 繪製圖片上的互動點位標記紋理 (編號圓點 + 選填文字標籤)
+    function createHotspotTexture(index, labelText) {
+      const cvs = document.createElement('canvas');
+      cvs.width = 256;
+      cvs.height = 256;
+      const ctx = cvs.getContext('2d');
+      const cx = 128, cy = 128;
+
+      // 外圈半透明白光環
+      ctx.beginPath();
+      ctx.arc(cx, cy, 68, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(0, 122, 255, 0.35)";
+      ctx.fill();
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = "#ffffff";
+      ctx.stroke();
+
+      // 內圈實心藍底圓鈕
+      ctx.beginPath();
+      ctx.arc(cx, cy, 46, 0, Math.PI * 2);
+      ctx.fillStyle = "#007aff";
+      ctx.fill();
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = "#ffffff";
+      ctx.stroke();
+
+      // 點位編號或點擊圖示
+      ctx.font = "bold 44px -apple-system, sans-serif";
+      ctx.fillStyle = "#ffffff";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(String(index), cx, cy + 2);
+
+      // 若有設定點位名稱，於下方繪製小標籤
+      if (labelText && labelText.trim() !== "") {
+        ctx.fillStyle = "rgba(0, 0, 0, 0.85)";
+        ctx.fillRect(16, 202, 224, 44);
+        ctx.strokeStyle = "#007aff";
+        ctx.lineWidth = 3;
+        ctx.strokeRect(16, 202, 224, 44);
+        ctx.font = "bold 26px -apple-system, sans-serif";
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText(labelText.trim().slice(0, 7), cx, 224);
+      }
+
+      const tex = new THREE.CanvasTexture(cvs);
+      tex.needsUpdate = true;
+      return tex;
+    }
+
     async function init() {
       if (checkInAppBrowser()) return;
 
@@ -172,16 +223,15 @@
           THREE.ColorManagement.enabled = false;
         }
 
-        statusMsg.innerText = "⏳ 3/3 正在檢查已發布的影片資產...";
+        statusMsg.innerText = "⏳ 3/3 正在檢查已發布的媒體資產...";
+        // 檢查影片資產
         if (config.videos && Array.isArray(config.videos)) {
           for (let i = 0; i < config.videos.length; i++) {
             const vConf = config.videos[i];
-            const exists = await checkVideoExists(vConf.url);
+            const exists = await checkAssetExists(vConf.url);
             if (exists) {
               const v = document.createElement('video');
               v.src = `${vConf.url}?t=${Date.now()}`;
-
-              // 循環與內嵌播放屬性設定
               v.loop = true;
               v.muted = true;
               v.playsInline = true;
@@ -192,7 +242,6 @@
               v.setAttribute('preload', 'auto');
               v.crossOrigin = "anonymous";
 
-              // 監聽 ended 事件確保萬無一失
               v.addEventListener('ended', () => {
                 v.currentTime = 0;
                 v.play().catch(() => {});
@@ -205,7 +254,16 @@
           }
         }
 
-        statusMsg.innerText = `✅ 準備就緒（偵測到 ${validVideoItems.length} 支有效影片）\n請將鏡頭對準實體圖卡`;
+        // 檢查新增的 AR 圖片資產
+        if (config.imageLayer && config.imageLayer.enabled && config.imageLayer.url) {
+          const imgExists = await checkAssetExists(config.imageLayer.url);
+          if (imgExists) {
+            validImageLayer = config.imageLayer;
+          }
+        }
+
+        const imgInfo = validImageLayer ? ` + 1 張互動圖片(${(validImageLayer.hotspots || []).length}個點位)` : "";
+        statusMsg.innerText = `✅ 準備就緒（偵測到 ${validVideoItems.length} 支影片${imgInfo}）\n請將鏡頭對準實體圖卡`;
         startBtn.innerText = "點擊啟動 AR 鏡頭";
         startBtn.disabled = false;
         startBtn.onclick = startAR;
@@ -222,7 +280,6 @@
       startBtn.disabled = true;
       startBtn.innerText = "相機啟動中...";
 
-      // 手勢第一時間同步喚醒所有影片
       validVideoItems.forEach(item => {
         item.element.play().catch(e => console.warn(`影片 ${item.index} 初始喚醒:`, e));
       });
@@ -244,12 +301,12 @@
         const { renderer, scene, camera } = mindarThree;
         renderer.setClearColor(0x000000, 0);
 
-        // 直接使用原生 anchor，徹底根除多次移開圖卡重對準時的累計歪斜問題
         const anchor = mindarThree.addAnchor(0);
         const clickables = [];
+        const pulseHotspots = [];
 
         // =========================================================
-        // A. 簡潔浮空文字看板 (直接掛載於原生 anchor.group)
+        // A. 簡潔浮空文字看板
         // =========================================================
         const bannerTexture = createCleanBannerTexture(config.bannerText);
         const bannerMesh = new THREE.Mesh(
@@ -264,6 +321,7 @@
         const baseBannerY = (config.bannerPosY !== undefined) ? Number(config.bannerPosY) : 0.65;
         bannerMesh.position.set(0, baseBannerY, 0.12);
         bannerMesh.renderOrder = 20;
+        bannerMesh.userData = { targetUrl: config.redirectUrl, isHotspot: false };
         anchor.group.add(bannerMesh);
         clickables.push(bannerMesh);
 
@@ -328,6 +386,7 @@
           mesh.position.set(baseX, baseY, baseZ);
           mesh.rotation.set(0, baseRY, baseRZ);
           mesh.renderOrder = 10 + idx;
+          mesh.userData = { targetUrl: vConfig.linkUrl || config.redirectUrl, isHotspot: false };
 
           anchor.group.add(mesh);
           clickables.push(mesh);
@@ -341,7 +400,80 @@
         });
 
         // =========================================================
-        // C. 追蹤狀態事件
+        // C. 新增：AR 圖片圖層與多點位互動熱點 (Hotspots)
+        // =========================================================
+        if (validImageLayer) {
+          const imgGroup = new THREE.Group();
+          const imgX = Number(validImageLayer.px || 0);
+          const imgY = Number(validImageLayer.py || 0);
+          const imgZ = Number(validImageLayer.pz ?? 0.10);
+          const imgRY = THREE.MathUtils.degToRad(Number(validImageLayer.ry || 0));
+          const imgRZ = THREE.MathUtils.degToRad(Number(validImageLayer.rz || 0));
+          const imgScale = Number(validImageLayer.scale || 1.0);
+
+          imgGroup.position.set(imgX, imgY, imgZ);
+          imgGroup.rotation.set(0, imgRY, imgRZ);
+          anchor.group.add(imgGroup);
+
+          const texLoader = new THREE.TextureLoader();
+          texLoader.setCrossOrigin("anonymous");
+          texLoader.load(`${validImageLayer.url}?t=${Date.now()}`, (imgTex) => {
+            const imgW = imgTex.image.width || 1;
+            const imgH = imgTex.image.height || 1;
+            const aspect = imgW / imgH;
+
+            const planeH = 0.65 * imgScale;
+            const planeW = planeH * aspect;
+
+            const imgMat = new THREE.MeshBasicMaterial({
+              map: imgTex,
+              transparent: true,
+              side: THREE.DoubleSide,
+              depthWrite: false
+            });
+            const imgMesh = new THREE.Mesh(new THREE.PlaneGeometry(planeW, planeH), imgMat);
+            imgMesh.renderOrder = 15;
+            imgGroup.add(imgMesh);
+
+            // 依據設定的點位 (uvX, uvY) 在圖片表面建立可點擊標記
+            const hotspots = Array.isArray(validImageLayer.hotspots) ? validImageLayer.hotspots : [];
+            hotspots.forEach((spot, sIdx) => {
+              if (!spot.url) return;
+
+              const uvX = Number(spot.uvX ?? 0.5);
+              const uvY = Number(spot.uvY ?? 0.5);
+
+              // 將 0~1 的圖片點擊座標轉換為 3D 平面相對座標
+              const localX = (uvX - 0.5) * planeW;
+              const localY = (0.5 - uvY) * planeH;
+
+              const hsTex = createHotspotTexture(sIdx + 1, spot.label || "");
+              const hsMat = new THREE.MeshBasicMaterial({
+                map: hsTex,
+                transparent: true,
+                side: THREE.DoubleSide,
+                depthWrite: false
+              });
+
+              const markerSize = Math.max(0.11, 0.12 * imgScale);
+              const hsMesh = new THREE.Mesh(new THREE.PlaneGeometry(markerSize, markerSize), hsMat);
+              hsMesh.position.set(localX, localY, 0.015); // 浮於圖片表面正前方
+              hsMesh.renderOrder = 25 + sIdx;
+              hsMesh.userData = {
+                targetUrl: spot.url,
+                isHotspot: true,
+                label: spot.label || `點位 ${sIdx + 1}`
+              };
+
+              imgGroup.add(hsMesh);
+              clickables.push(hsMesh);
+              pulseHotspots.push(hsMesh);
+            });
+          });
+        }
+
+        // =========================================================
+        // D. 追蹤狀態事件
         // =========================================================
         let isTargetLocked = false;
 
@@ -366,7 +498,7 @@
         hud.style.display = 'block';
 
         // =========================================================
-        // D. 螢幕旋轉即時校正處理 (修復手機橫直轉動時歪斜的問題)
+        // E. 螢幕旋轉即時校正處理
         // =========================================================
         window.addEventListener('resize', () => {
           const width = window.innerWidth;
@@ -377,13 +509,16 @@
         });
 
         // =========================================================
-        // E. 渲染迴圈：無限循環巡檢與紋理更新
+        // F. 渲染迴圈：無限循環巡檢、紋理更新與點位微幅呼吸提示
         // =========================================================
+        const clock = new THREE.Clock();
+
         renderer.setAnimationLoop(() => {
+          const elapsed = clock.getElapsedTime();
+
           activeVideoObjects.forEach(vo => {
             const v = vo.video;
 
-            // 無限循環巡檢防線
             if (isTargetLocked) {
               if (v.duration > 0 && v.currentTime >= v.duration - 0.05) {
                 v.currentTime = 0;
@@ -397,7 +532,6 @@
             if (v.readyState >= v.HAVE_CURRENT_DATA) {
               vo.texture.needsUpdate = true;
 
-              // 自動校正真實長寬比，防止影像變形
               if (!vo.aspectCalibrated && v.videoWidth > 0 && v.videoHeight > 0) {
                 const aspect = v.videoWidth / v.videoHeight;
                 vo.mesh.scale.set(aspect, 1, 1);
@@ -406,23 +540,44 @@
             }
           });
 
+          // 讓圖片上的點位標記有輕微的原地縮放提示 (位置絕對固定不移動)
+          pulseHotspots.forEach((hs, idx) => {
+            const s = 1.0 + Math.sin(elapsed * 4.0 + idx) * 0.08;
+            hs.scale.set(s, s, 1);
+          });
+
           renderer.render(scene, camera);
         });
 
         // =========================================================
-        // F. 點擊與觸控跳轉判定
+        // G. 點擊與觸控跳轉判定 (優先觸發圖片點位專屬連結)
         // =========================================================
         const raycaster = new THREE.Raycaster();
         const pointer = new THREE.Vector2();
+        let lastNavigateTime = 0;
 
         function handleInteract(clientX, clientY) {
           if (!isTargetLocked) return;
+          if (Date.now() - lastNavigateTime < 800) return; // 防止連點重複觸發
+
           pointer.x = (clientX / window.innerWidth) * 2 - 1;
           pointer.y = -(clientY / window.innerHeight) * 2 + 1;
           raycaster.setFromCamera(pointer, camera);
+
           const intersects = raycaster.intersectObjects(clickables, false);
-          if (intersects.length > 0 && config.redirectUrl) {
-            window.location.href = config.redirectUrl;
+          if (intersects.length > 0) {
+            // 優先檢查是否點中「圖片上的特定點位 (isHotspot)」
+            const hotspotHit = intersects.find(hit => hit.object.userData && hit.object.userData.isHotspot);
+            const chosenHit = hotspotHit || intersects[0];
+            const targetUrl = chosenHit.object.userData?.targetUrl || config.redirectUrl;
+
+            if (targetUrl) {
+              lastNavigateTime = Date.now();
+              const newWin = window.open(targetUrl, '_blank');
+              if (!newWin) {
+                window.location.href = targetUrl;
+              }
+            }
           }
         }
 
