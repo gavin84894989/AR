@@ -5,7 +5,7 @@
   "videos": [
     {
       "url": "./videos/video_0.mp4",
-      "keyColor": "#3cff14",
+      "keyColor": "#1b4b11",
       "similarity": 0.4,
       "smoothness": 0.1,
       "px": -0.4,
@@ -45,24 +45,24 @@
     "rz": 0,
     "hotspots": [
       {
-        "id": 1792336286484,
+        "id": 1792336947034,
         "label": "點位 1",
-        "uvX": 0.4753,
-        "uvY": 0.4862,
+        "uvX": 0.5123,
+        "uvY": 0.4914,
         "url": "https://youtu.be/BlrHaedOOUU"
       },
       {
-        "id": 1792336297176,
+        "id": 1792336962256,
         "label": "點位 2",
-        "uvX": 0.4725,
-        "uvY": 0.5569,
+        "uvX": 0.4497,
+        "uvY": 0.5608,
         "url": "https://youtu.be/BlrHaedOOUU"
       },
       {
-        "id": 1792336300616,
+        "id": 1792336965866,
         "label": "點位 3",
-        "uvX": 0.6774,
-        "uvY": 0.6394,
+        "uvX": 0.4839,
+        "uvY": 0.6381,
         "url": "https://youtu.be/BlrHaedOOUU"
       }
     ]
