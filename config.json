@@ -30,24 +30,24 @@
     "rz": 0,
     "hotspots": [
       {
-        "id": 1792337447606,
+        "id": 1792339348928,
         "label": "點位 1",
-        "uvX": 0.5009,
-        "uvY": 0.4783,
+        "uvX": 0.4788,
+        "uvY": 0.3552,
+        "url": "https://www.opentix.life/event/2100541819672694784"
+      },
+      {
+        "id": 1792339374434,
+        "label": "點位 2",
+        "uvX": 0.4317,
+        "uvY": 0.4608,
         "url": "https://inff.cc/"
       },
       {
-        "id": 1792337471854,
-        "label": "點位 2",
-        "uvX": 0.4526,
-        "uvY": 0.5621,
-        "url": "https://www.opentix.life/event/2090269380048343041?tapeID=ttc03smaA3-"
-      },
-      {
-        "id": 1792337506169,
+        "id": 1792339386360,
         "label": "點位 3",
-        "uvX": 0.481,
-        "uvY": 0.625,
+        "uvX": 0.3321,
+        "uvY": 0.5741,
         "url": "https://home.gamer.com.tw/artwork.php?sn=5799647"
       }
     ]
