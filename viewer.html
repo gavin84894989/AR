@@ -43,8 +43,29 @@
     }
     #ar-container canvas {
       z-index: 2 !important;
-      pointer-events: auto !important;
+      pointer-events: auto;
+    }
+
+    /* 3D 轉 2D 原生透明連結覆蓋層 (確保手機點擊 100% 觸發原生新分頁，不被彈窗阻擋器攔截) */
+    #ar-link-layer {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      pointer-events: none;
+      z-index: 50;
+      overflow: hidden;
+    }
+
+    .ar-dom-link {
+      position: fixed;
+      display: none;
+      background: rgba(255, 255, 255, 0);
+      pointer-events: auto;
       cursor: pointer;
+      text-decoration: none;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      -webkit-user-select: none;
     }
 
     /* 隱藏預載影片池 */
@@ -96,10 +117,9 @@
   </div>
 
   <div id="ar-container"></div>
+  <!-- 原生透明 <a> 連結同步層 -->
+  <div id="ar-link-layer"></div>
   <div id="video-preload-pool"></div>
-
-  <!-- 專用於開啟新分頁的隱藏實體連結標籤 (避免手機攔截彈窗並完整保留原掃描頁) -->
-  <a id="new-tab-launcher" href="#" target="_blank" rel="noopener noreferrer" style="display:none;"></a>
 
   <script>
     const startBtn = document.getElementById('start-btn');
@@ -107,7 +127,7 @@
     const statusMsg = document.getElementById('status-msg');
     const hud = document.getElementById('tracker-hud');
     const preloadPool = document.getElementById('video-preload-pool');
-    const newTabLauncher = document.getElementById('new-tab-launcher');
+    const arLinkLayer = document.getElementById('ar-link-layer');
 
     let THREE = null;
     let MindARThree = null;
@@ -173,6 +193,26 @@
       const tex = new THREE.CanvasTexture(cvs);
       tex.needsUpdate = true;
       return tex;
+    }
+
+    // 建立綁定於 3D 物件的原生透明 <a target="_blank"> 標籤
+    const trackedDomLinks = [];
+    function registerDomLinkForMesh(mesh, targetUrl, zIndexVal, padPx = 6) {
+      if (!targetUrl) return;
+      const a = document.createElement('a');
+      a.className = 'ar-dom-link';
+      a.href = targetUrl;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.style.zIndex = String(zIndexVal);
+
+      a.addEventListener('click', () => {
+        hud.style.background = "rgba(0, 122, 255, 0.95)";
+        hud.innerHTML = "🔗 已於新分頁開啟連結";
+      });
+
+      arLinkLayer.appendChild(a);
+      trackedDomLinks.push({ mesh, anchorEl: a, padPx });
     }
 
     async function init() {
@@ -276,12 +316,8 @@
         const anchor = mindarThree.addAnchor(0);
         const defaultRedirectUrl = normalizeUrl(config.redirectUrl) || "https://example.com";
 
-        const hotspotClickables = [];
-        const generalClickables = [];
-        let interactiveImageMesh = null;
-
         // =========================================================
-        // A. 浮空文字看板
+        // A. 浮空文字看板 (綁定原生 <a target="_blank"> 透明連結，z-index: 60)
         // =========================================================
         if (config.bannerEnabled !== false && config.bannerText && config.bannerText.trim() !== "") {
           const bannerTexture = createCleanBannerTexture(config.bannerText);
@@ -304,11 +340,11 @@
             halfH: bannerH / 2
           };
           anchor.group.add(bannerMesh);
-          generalClickables.push(bannerMesh);
+          registerDomLinkForMesh(bannerMesh, defaultRedirectUrl, 60, 8);
         }
 
         // =========================================================
-        // B. 零殘影去背影片平面
+        // B. 零殘影去背影片平面 (綁定原生 <a target="_blank"> 透明連結，z-index: 55)
         // =========================================================
         const vShader = `
           varying vec2 vUv;
@@ -372,14 +408,16 @@
           mesh.position.set(baseX, baseY, baseZ);
           mesh.rotation.set(0, baseRY, baseRZ);
           mesh.renderOrder = 10 + idx;
+
+          const videoUrl = normalizeUrl(vConfig.linkUrl) || defaultRedirectUrl;
           mesh.userData = {
-            targetUrl: normalizeUrl(vConfig.linkUrl) || defaultRedirectUrl,
+            targetUrl: videoUrl,
             halfW: planeH / 2,
             halfH: planeH / 2
           };
 
           anchor.group.add(mesh);
-          generalClickables.push(mesh);
+          registerDomLinkForMesh(mesh, videoUrl, 55, 6);
 
           activeVideoObjects.push({
             video: v,
@@ -391,7 +429,7 @@
         });
 
         // =========================================================
-        // C. AR 互動圖片與「100% 全透明」點位感應區
+        // C. AR 互動圖片與「100% 全透明」點位感應區 (點位 z-index: 65 最優先)
         // =========================================================
         if (validImageLayer) {
           const imgGroup = new THREE.Group();
@@ -430,9 +468,10 @@
               halfH: planeH / 2
             };
             imgGroup.add(imgMesh);
-            interactiveImageMesh = imgMesh;
-            generalClickables.push(imgMesh);
+            // 圖片本體綁定預設連結 (z-index: 50)
+            registerDomLinkForMesh(imgMesh, defaultRedirectUrl, 50, 0);
 
+            // 圖片上的各個透明點位綁定專屬連結 (z-index: 65 最高優先級)
             const hotspots = Array.isArray(validImageLayer.hotspots) ? validImageLayer.hotspots : [];
             hotspots.forEach((spot) => {
               const spotTargetUrl = normalizeUrl(spot.url) || defaultRedirectUrl;
@@ -450,7 +489,7 @@
                 depthWrite: false
               });
 
-              const hitSize = Math.max(0.18, 0.20 * imgScale);
+              const hitSize = Math.max(0.16, 0.18 * imgScale);
               const hsMesh = new THREE.Mesh(new THREE.PlaneGeometry(hitSize, hitSize), hsMat);
               hsMesh.position.set(localX, localY, 0.01);
               hsMesh.userData = {
@@ -461,7 +500,7 @@
               };
 
               imgGroup.add(hsMesh);
-              hotspotClickables.push(hsMesh);
+              registerDomLinkForMesh(hsMesh, spotTargetUrl, 65, 12);
             });
           });
         }
@@ -471,7 +510,6 @@
         // =========================================================
         let isTargetLocked = false;
         let lastLockedTime = 0;
-        const lastValidAnchorMatrix = new THREE.Matrix4();
 
         anchor.onTargetFound = () => {
           isTargetLocked = true;
@@ -502,11 +540,7 @@
           setTimeout(() => window.dispatchEvent(new Event('resize')), 350);
         });
 
-        let isNavigating = false;
-
-        // 當使用者關閉新分頁或切回本掃描頁時，自動恢復相機串流與影片播放
         function resumeARSessionOnReturn() {
-          isNavigating = false;
           const camVideo = container.querySelector('video');
           if (camVideo && camVideo.paused) {
             camVideo.play().catch(() => {});
@@ -527,12 +561,14 @@
         window.addEventListener('pageshow', resumeARSessionOnReturn);
 
         // =========================================================
-        // F. 渲染迴圈：無限循環巡檢與真實比例校正
+        // F. 渲染迴圈：更新影片 + 實時將 3D 物件投影至 2D 原生 <a target="_blank">
         // =========================================================
+        const cornerVec = new THREE.Vector3();
+
         renderer.setAnimationLoop(() => {
+          const now = performance.now();
           if (isTargetLocked) {
-            lastLockedTime = performance.now();
-            lastValidAnchorMatrix.copy(anchor.group.matrix);
+            lastLockedTime = now;
           }
 
           activeVideoObjects.forEach(vo => {
@@ -560,159 +596,65 @@
             }
           });
 
+          // 先執行 3D 場景渲染，確保所有矩陣皆已更新
           renderer.render(scene, camera);
-        });
 
-        // =========================================================
-        // G. 雙引擎點擊判定 + 強制以「新分頁 (_blank)」開啟連結
-        // =========================================================
-        const raycaster = new THREE.Raycaster();
-        const pointer = new THREE.Vector2();
-
-        function isPointInProjectedMesh(mesh, ndcX, ndcY, pad = 0.06) {
-          const hw = mesh.userData.halfW || 0.3;
-          const hh = mesh.userData.halfH || 0.2;
-          const corners = [
-            new THREE.Vector3(-hw, -hh, 0),
-            new THREE.Vector3( hw, -hh, 0),
-            new THREE.Vector3( hw,  hh, 0),
-            new THREE.Vector3(-hw,  hh, 0),
-            new THREE.Vector3(  0,   0, 0)
-          ];
-
-          let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-          corners.forEach(c => {
-            c.applyMatrix4(mesh.matrixWorld).project(camera);
-            if (c.x < minX) minX = c.x;
-            if (c.x > maxX) maxX = c.x;
-            if (c.y < minY) minY = c.y;
-            if (c.y > maxY) maxY = c.y;
-          });
-
-          return (
-            ndcX >= minX - pad && ndcX <= maxX + pad &&
-            ndcY >= minY - pad && ndcY <= maxY + pad
-          );
-        }
-
-        // 【核心修改】：使用 _blank 實體錨點開啟新分頁，絕不離開原 AR 掃描頁
-        function executeNavigationInNewTab(targetUrl) {
-          const finalUrl = normalizeUrl(targetUrl) || defaultRedirectUrl;
-          if (!finalUrl || isNavigating) return;
-          isNavigating = true;
-
-          hud.style.background = "rgba(0, 122, 255, 0.95)";
-          hud.innerHTML = "🔗 已於新分頁開啟連結";
-
-          // 透過隱藏的 <a target="_blank" rel="noopener noreferrer"> 同步觸發新分頁
-          newTabLauncher.href = finalUrl;
-          newTabLauncher.click();
-
-          // 600ms 後解除點擊鎖並恢復提示燈，方便返回時直接點擊下一個點位
-          setTimeout(() => {
-            isNavigating = false;
-            hud.style.background = isTargetLocked ? "rgba(40, 167, 69, 0.9)" : "rgba(0, 0, 0, 0.75)";
-            hud.innerHTML = isTargetLocked ? "🟢 目標已鎖定！" : "🟡 正在尋找目標圖卡...";
-          }, 600);
-        }
-
-        function handleScreenTap(clientX, clientY) {
-          const recentlyLocked = (performance.now() - lastLockedTime) < 2500;
-          if (!isTargetLocked && !recentlyLocked) return;
-
-          if (!isTargetLocked && recentlyLocked) {
-            anchor.group.matrix.copy(lastValidAnchorMatrix);
-          }
-
-          scene.updateMatrixWorld(true);
-          anchor.group.updateMatrixWorld(true);
-          camera.updateMatrixWorld(true);
-          camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
-          camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
-
-          const rect = renderer.domElement.getBoundingClientRect();
-          if (rect.width === 0 || rect.height === 0) return;
-
-          const ndcX = ((clientX - rect.left) / rect.width) * 2 - 1;
-          const ndcY = -((clientY - rect.top) / rect.height) * 2 + 1;
-
-          pointer.set(ndcX, ndcY);
-          raycaster.setFromCamera(pointer, camera);
-
-          // 第一優先：圖片透明點位
-          if (hotspotClickables.length > 0) {
-            const hsHits = raycaster.intersectObjects(hotspotClickables, true);
-            if (hsHits.length > 0) {
-              executeNavigationInNewTab(hsHits[0].object.userData?.targetUrl);
-              return;
+          // 同步更新每個 3D 物件對應的透明 <a target="_blank"> 螢幕座標
+          const isLinkActive = isTargetLocked || (now - lastLockedTime < 1500);
+          if (!isLinkActive) {
+            for (let i = 0; i < trackedDomLinks.length; i++) {
+              trackedDomLinks[i].anchorEl.style.display = 'none';
             }
-
-            let closestHs = null;
-            let minScreenDist = 0.22;
-            hotspotClickables.forEach(hsMesh => {
-              const center = new THREE.Vector3(0, 0, 0).applyMatrix4(hsMesh.matrixWorld).project(camera);
-              const dist = Math.hypot(ndcX - center.x, ndcY - center.y);
-              if (dist < minScreenDist) {
-                minScreenDist = dist;
-                closestHs = hsMesh;
-              }
-            });
-            if (closestHs) {
-              executeNavigationInNewTab(closestHs.userData?.targetUrl);
-              return;
-            }
-          }
-
-          // 第二優先：互動圖片 UV 比對
-          if (interactiveImageMesh) {
-            const imgHits = raycaster.intersectObject(interactiveImageMesh, true);
-            if (imgHits.length > 0 && imgHits[0].uv) {
-              const u = imgHits[0].uv.x;
-              const v = 1.0 - imgHits[0].uv.y;
-
-              let bestSpotUrl = null;
-              let minUvDist = 0.20;
-              const hotspots = (validImageLayer && Array.isArray(validImageLayer.hotspots)) ? validImageLayer.hotspots : [];
-              hotspots.forEach(spot => {
-                const d = Math.hypot(u - Number(spot.uvX ?? 0.5), v - Number(spot.uvY ?? 0.5));
-                if (d < minUvDist) {
-                  minUvDist = d;
-                  bestSpotUrl = normalizeUrl(spot.url) || defaultRedirectUrl;
-                }
-              });
-
-              executeNavigationInNewTab(bestSpotUrl || defaultRedirectUrl);
-              return;
-            }
-          }
-
-          // 第三優先：影片與浮空文字框
-          const generalHits = raycaster.intersectObjects(generalClickables, true);
-          if (generalHits.length > 0) {
-            executeNavigationInNewTab(generalHits[0].object.userData?.targetUrl);
             return;
           }
 
-          for (let i = 0; i < generalClickables.length; i++) {
-            const mesh = generalClickables[i];
-            if (isPointInProjectedMesh(mesh, ndcX, ndcY, 0.08)) {
-              executeNavigationInNewTab(mesh.userData?.targetUrl);
-              return;
+          const canvasRect = renderer.domElement.getBoundingClientRect();
+          if (canvasRect.width === 0 || canvasRect.height === 0) return;
+
+          anchor.group.updateMatrixWorld(true);
+          camera.updateMatrixWorld(true);
+
+          for (let i = 0; i < trackedDomLinks.length; i++) {
+            const item = trackedDomLinks[i];
+            const mesh = item.mesh;
+            const el = item.anchorEl;
+            const pad = item.padPx;
+
+            // 注意：geometry 本身若是 basePlaneHeight 且透過 mesh.scale.x 縮放，局部座標直接取 geometry 頂點半寬即可讓 matrixWorld 自動包含 scale
+            const geomParams = mesh.geometry.parameters;
+            const localHW = (geomParams && geomParams.width) ? geomParams.width / 2 : (mesh.userData.halfW || 0.25);
+            const localHH = (geomParams && geomParams.height) ? geomParams.height / 2 : (mesh.userData.halfH || 0.25);
+
+            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+            const localCorners = [
+              [-localHW, -localHH],
+              [ localHW, -localHH],
+              [ localHW,  localHH],
+              [-localHW,  localHH]
+            ];
+
+            for (let c = 0; c < 4; c++) {
+              cornerVec.set(localCorners[c][0], localCorners[c][1], 0);
+              cornerVec.applyMatrix4(mesh.matrixWorld);
+              cornerVec.project(camera);
+
+              const sx = canvasRect.left + ((cornerVec.x + 1) * 0.5) * canvasRect.width;
+              const sy = canvasRect.top + ((-cornerVec.y + 1) * 0.5) * canvasRect.height;
+
+              if (sx < minX) minX = sx;
+              if (sx > maxX) maxX = sx;
+              if (sy < minY) minY = sy;
+              if (sy > maxY) maxY = sy;
             }
-          }
-        }
 
-        // 記錄手指按下位置以過濾滑動，並統一於原生 click 事件中觸發新分頁開啟
-        let downX = 0, downY = 0;
-        window.addEventListener('pointerdown', (e) => {
-          downX = e.clientX;
-          downY = e.clientY;
-        }, { passive: true });
+            const boxW = Math.max(28, (maxX - minX) + pad * 2);
+            const boxH = Math.max(28, (maxY - minY) + pad * 2);
 
-        window.addEventListener('click', (e) => {
-          if (overlay.style.display !== 'none') return;
-          if (Math.hypot(e.clientX - downX, e.clientY - downY) < 40) {
-            handleScreenTap(e.clientX, e.clientY);
+            el.style.left = `${minX - pad}px`;
+            el.style.top = `${minY - pad}px`;
+            el.style.width = `${boxW}px`;
+            el.style.height = `${boxH}px`;
+            el.style.display = 'block';
           }
         });
 
