@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
-  <title>AR 發布管理後台</title>
+  <title>AR 多產品發布管理後台</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script type="importmap">
@@ -18,23 +18,33 @@
     * { box-sizing: border-box; }
     body { margin: 0; display: flex; height: 100vh; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #1a1a1a; color: #fff; overflow: hidden; }
     #preview-area { flex: 1; position: relative; background: #18181b; }
-    #sidebar { width: 440px; background: #ffffff; color: #1e293b; padding: 18px; overflow-y: auto; border-left: 1px solid #cbd5e1; }
+    #preview-badge {
+      position: absolute; top: 14px; left: 14px; z-index: 10;
+      background: rgba(15, 23, 42, 0.85); border: 1px solid #007aff;
+      color: #fff; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: bold;
+    }
+    #sidebar { width: 450px; background: #ffffff; color: #1e293b; padding: 18px; overflow-y: auto; border-left: 1px solid #cbd5e1; }
     h2 { margin: 0 0 14px 0; font-size: 18px; color: #0f172a; border-bottom: 2px solid #007aff; padding-bottom: 8px; }
     .card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 14px; position: relative; }
     .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
     .card h3 { margin: 0; font-size: 14px; color: #007aff; }
     label { display: block; font-size: 12px; font-weight: 600; margin: 6px 0 3px; color: #475569; }
-    input[type="text"], input[type="password"] { width: 100%; padding: 7px 9px; border: 1px solid #cbd5e1; border-radius: 5px; font-size: 13px; }
+    input[type="text"], input[type="password"], select { width: 100%; padding: 7px 9px; border: 1px solid #cbd5e1; border-radius: 5px; font-size: 13px; background: #fff; }
     input[type="file"] { font-size: 12px; width: 100%; }
     input[type="range"] { width: 100%; margin: 2px 0; }
     .row { display: flex; gap: 8px; align-items: center; }
     .col { flex: 1; }
     .hint { font-size: 11px; color: #64748b; margin-top: 3px; }
 
-    /* 新增與刪除按鈕樣式 */
+    /* 按鈕樣式 */
+    .btn-primary-sm {
+      background: #007aff; color: #fff; border: none; border-radius: 5px;
+      padding: 7px 12px; font-size: 12px; font-weight: bold; cursor: pointer; white-space: nowrap;
+    }
+    .btn-primary-sm:hover { background: #0062cc; }
     .btn-del-card {
       background: #ef4444; color: #fff; border: none; border-radius: 5px;
-      padding: 4px 10px; font-size: 12px; font-weight: bold; cursor: pointer;
+      padding: 4px 10px; font-size: 12px; font-weight: bold; cursor: pointer; white-space: nowrap;
     }
     .btn-del-card:hover { background: #dc2626; }
     .btn-add-layer {
@@ -77,16 +87,25 @@
       background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer;
     }
     #publish-btn:disabled { background: #94a3b8; cursor: not-allowed; }
-    #status { margin-top: 10px; font-size: 12px; font-weight: bold; white-space: pre-wrap; }
-    #qrcode { margin-top: 12px; display: flex; justify-content: center; }
+    #status { margin-top: 10px; font-size: 12px; font-weight: bold; white-space: pre-wrap; line-height: 1.5; }
+    #qr-box {
+      margin-top: 12px; padding: 12px; background: #f1f5f9; border-radius: 8px;
+      text-align: center; display: none;
+    }
+    #qrcode { display: flex; justify-content: center; margin-bottom: 8px; }
+    #viewer-link-display {
+      font-size: 11px; color: #0284c7; word-break: break-all; display: block; margin-top: 4px;
+    }
   </style>
 </head>
 <body>
 
-  <div id="preview-area"></div>
+  <div id="preview-area">
+    <div id="preview-badge">目前編輯專案：預設專案 (Root)</div>
+  </div>
 
   <div id="sidebar">
-    <h2>AR 發布管理後台</h2>
+    <h2>AR 多產品發布管理後台</h2>
 
     <!-- GitHub 連線設定 -->
     <div class="card">
@@ -99,14 +118,39 @@
       <input type="password" id="gh-token" placeholder="ghp_xxxxxxxxxxxx">
     </div>
 
+    <!-- 0. 新增：多產品專案管理中心 -->
+    <div class="card" style="border: 2px solid #007aff; background: #eff6ff;">
+      <div class="card-header">
+        <h3>0. 多產品專案管理中心</h3>
+        <button type="button" id="sync-projects-btn" class="btn-primary-sm">🔄 讀取線上專案清單</button>
+      </div>
+
+      <label>選擇要編輯的產品專案</label>
+      <div class="row">
+        <select id="project-select" style="flex:1; font-weight:bold; color:#0f172a;">
+          <option value="">[根目錄預設專案 (相容舊版 QR)]</option>
+        </select>
+        <button type="button" id="delete-project-btn" class="btn-del-card" style="display:none;">🗑️ 刪除此專案</button>
+      </div>
+
+      <label style="margin-top:10px;">建立或切換至新產品代號 (限英數、底線或連字號)</label>
+      <div class="row">
+        <input type="text" id="new-project-id" placeholder="例如: product_01 或 card_A" style="flex:1;">
+        <button type="button" id="create-project-btn" class="btn-primary-sm">＋ 新增/切換專案</button>
+      </div>
+
+      <label style="margin-top:8px;">產品專案顯示名稱 (選填，顯示於觀看端標題)</label>
+      <input type="text" id="project-name-input" placeholder="例如: 2026 春季新品 AR 展示">
+    </div>
+
     <!-- 1. 實體掃描圖卡 -->
     <div class="card">
       <div class="card-header"><h3>1. 實體掃描圖卡 (JPG/PNG)</h3></div>
       <input type="file" id="target-file" accept="image/png, image/jpeg">
-      <div class="hint">若本次不換圖，可留空沿用既有 targets.mind</div>
+      <div id="target-mind-hint" class="hint">若本專案已上傳過 targets.mind 且不換圖，可留空</div>
     </div>
 
-    <!-- 2. 跳轉網址與浮空提示看板 (可自由開關或移除) -->
+    <!-- 2. 跳轉網址與浮空提示看板 -->
     <div class="card">
       <div class="card-header">
         <h3>2. 預設連結與浮空提示看板</h3>
@@ -122,7 +166,7 @@
       <input type="range" id="banner-y" min="-1" max="1.5" step="0.05" value="0.65">
     </div>
 
-    <!-- 3. AR 互動圖片與透明點位設定 (可一鍵清空移除) -->
+    <!-- 3. AR 互動圖片與透明點位設定 -->
     <div class="card" style="border-color: #38bdf8; background: #f0f9ff;">
       <div class="card-header">
         <h3>3. AR 互動圖片與透明點位</h3>
@@ -162,9 +206,15 @@
     <div id="video-controls"></div>
     <button type="button" id="add-video-btn" class="btn-add-layer">＋ 新增去背影片圖層</button>
 
-    <button id="publish-btn">🚀 一鍵發布至 GitHub 並產生 QR</button>
+    <button id="publish-btn">🚀 一鍵發布此專案至 GitHub 並產生 QR</button>
     <div id="status"></div>
-    <div id="qrcode"></div>
+
+    <!-- 專屬 QR Code 與網址區塊 -->
+    <div id="qr-box">
+      <div style="font-size:12px; font-weight:bold; color:#0f172a; margin-bottom:6px;">📱 此產品專案專屬 AR QR Code：</div>
+      <div id="qrcode"></div>
+      <a id="viewer-link-display" href="#" target="_blank" rel="noopener noreferrer"></a>
+    </div>
   </div>
 
   <script type="module">
@@ -181,12 +231,68 @@
       return 'https://' + trimmed;
     }
 
+    function sanitizeRepoString(input) {
+      let cleaned = (input || '').trim();
+      cleaned = cleaned.replace(/^https?:\/\/github\.com\//i, '');
+      cleaned = cleaned.replace(/\.git$/i, '');
+      cleaned = cleaned.replace(/\s+/g, '');
+      cleaned = cleaned.replace(/^\/+|\/+$/g, '');
+      return cleaned;
+    }
+
     const repoInput = document.getElementById('gh-repo');
     const branchInput = document.getElementById('gh-branch');
     const tokenInput = document.getElementById('gh-token');
     repoInput.value = localStorage.getItem('ar_gh_repo') || 'gavin84894889/AR';
     branchInput.value = localStorage.getItem('ar_gh_branch') || 'main';
     tokenInput.value = localStorage.getItem('ar_gh_token') || '';
+
+    // 目前選取的產品專案代號 (空字串代表根目錄預設專案)
+    let currentProjectId = "";
+    let currentProjectHasMindFile = false;
+
+    const projectSelect = document.getElementById('project-select');
+    const deleteProjectBtn = document.getElementById('delete-project-btn');
+    const previewBadge = document.getElementById('preview-badge');
+    const targetMindHint = document.getElementById('target-mind-hint');
+
+    // 解析專案檔案路徑
+    function getProjectPrefix(projId = currentProjectId) {
+      return projId ? `projects/${projId}/` : '';
+    }
+
+    function resolveProjectAssetUrl(rawPath, projId = currentProjectId) {
+      if (!rawPath) return '';
+      if (/^https?:\/\//i.test(rawPath)) return rawPath;
+      const clean = rawPath.replace(/^\.\//, '').replace(/^\/+/, '');
+      if (!projId) return `./${clean}`;
+      if (clean.startsWith(`projects/${projId}/`)) return `./${clean}`;
+      return `./projects/${projId}/${clean}`;
+    }
+
+    function getViewerProductionUrl(repo, projId = currentProjectId) {
+      const parts = repo.split('/');
+      let baseUrl = `${window.location.origin}${window.location.pathname.replace('index.html', '')}viewer.html`;
+      if (parts.length === 2) {
+        baseUrl = `https://${parts[0]}.github.io/${parts[1]}/viewer.html`;
+      }
+      return projId ? `${baseUrl}?id=${encodeURIComponent(projId)}` : baseUrl;
+    }
+
+    function updateQRDisplay() {
+      const repo = sanitizeRepoString(repoInput.value);
+      if (!repo) return;
+      const url = getViewerProductionUrl(repo, currentProjectId);
+      const qrBox = document.getElementById('qr-box');
+      const qrContainer = document.getElementById('qrcode');
+      const linkEl = document.getElementById('viewer-link-display');
+
+      qrBox.style.display = 'block';
+      qrContainer.innerHTML = '';
+      new QRCode(qrContainer, { text: url, width: 145, height: 145 });
+      linkEl.href = url;
+      linkEl.innerText = url;
+    }
 
     // =========================================================
     // 左側 Three.js 3D 即時預覽初始化
@@ -206,7 +312,6 @@
     );
     scene.add(refBox);
 
-    // 浮空看板預覽
     const bannerCvs = document.createElement('canvas');
     bannerCvs.width = 1024; bannerCvs.height = 256;
     const bannerCtx = bannerCvs.getContext('2d');
@@ -238,7 +343,7 @@
     updateBannerPreview();
 
     // =========================================================
-    // 動態影片圖層管理系統 (支援手動刪除與新增)
+    // 動態影片圖層管理系統
     // =========================================================
     const vShader = `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
     const fShader = `
@@ -253,7 +358,17 @@
     `;
 
     const videoControlsContainer = document.getElementById('video-controls');
-    let videoLayers = []; // 儲存動態影片物件
+    let videoLayers = [];
+
+    function clearAllVideoLayers() {
+      videoLayers.forEach(layer => {
+        layer.videoEl.pause();
+        layer.videoEl.src = "";
+        scene.remove(layer.mesh);
+      });
+      videoLayers = [];
+      videoControlsContainer.innerHTML = '';
+    }
 
     function createVideoLayerObject(initialData = {}) {
       const id = initialData.id || (`v_${Date.now()}_${Math.floor(Math.random() * 1000)}`);
@@ -279,9 +394,11 @@
       mesh.visible = false;
       scene.add(mesh);
 
+      const resolvedUrl = initialData.url ? resolveProjectAssetUrl(initialData.url) : "";
+
       const layerObj = {
         id,
-        url: initialData.url || "",
+        url: resolvedUrl,
         file: null,
         keyColor: keyColorStr,
         similarity: simVal,
@@ -298,7 +415,6 @@
         aspect: 1.0
       };
 
-      // 若有既有遠端影片網址，先檢查是否存在並載入預覽
       if (layerObj.url) {
         fetch(`${layerObj.url}?t=${Date.now()}`, { method: 'HEAD' }).then(res => {
           if (res.ok) {
@@ -324,7 +440,7 @@
         card.className = 'card';
         const fileStatusText = layer.file
           ? `✅ 已選取新檔案：${layer.file.name}`
-          : (layer.url ? `📁 目前沿用線上檔案：${layer.url}` : `⚠️ 尚未選取影片檔案（未選取將不會發布）`);
+          : (layer.url ? `📁 目前沿用專案檔案：${layer.url}` : `⚠️ 尚未選取影片檔案（未選取將不會發布）`);
 
         card.innerHTML = `
           <div class="card-header">
@@ -352,7 +468,6 @@
           <input type="text" class="v-link-in" placeholder="https://..." value="${layer.linkUrl || ''}">
         `;
 
-        // 綁定刪除按鈕：徹底從場景與陣列移除
         card.querySelector('.btn-del-card').addEventListener('click', () => {
           layer.videoEl.pause();
           layer.videoEl.src = "";
@@ -361,7 +476,6 @@
           renderVideoCardsUI();
         });
 
-        // 綁定檔案上傳
         const fileIn = card.querySelector('.v-file-in');
         const fileHint = card.querySelector('.v-file-hint');
         fileIn.addEventListener('change', (e) => {
@@ -380,7 +494,6 @@
           }
         });
 
-        // 綁定各項滑桿與色彩參數
         card.querySelector('.v-color-in').addEventListener('input', (e) => {
           layer.keyColor = e.target.value;
           layer.mat.uniforms.keyColor.value.set(layer.keyColor);
@@ -414,7 +527,7 @@
     });
 
     // =========================================================
-    // AR 互動圖片與「全透明點位」管理 (支援一鍵清空移除)
+    // AR 互動圖片與「全透明點位」管理
     // =========================================================
     let hotspotsData = [];
     let currentImageAspect = 1.0;
@@ -432,6 +545,27 @@
     const pinsLayer = document.getElementById('hotspot-pins-layer');
     const hotspotListEl = document.getElementById('hotspot-list');
 
+    function clearImageLayerState() {
+      imgEnabledCheckbox.checked = false;
+      arImageInput.value = '';
+      existingImageUrl = '';
+      hotspotsData = [];
+      previewImgEl.removeAttribute('src');
+      editorWrap.style.display = 'none';
+      currentImgHint.innerText = '目前無使用中的圖片';
+      document.getElementById('img-px').value = 0;
+      document.getElementById('img-py').value = 0;
+      document.getElementById('img-pz').value = 0.10;
+      document.getElementById('img-scale').value = 1.0;
+      document.getElementById('img-ry').value = 0;
+      document.getElementById('img-rz').value = 0;
+      if (previewImgMesh) {
+        previewImgGroup.remove(previewImgMesh);
+        previewImgMesh = null;
+      }
+      renderHotspotEditorUI();
+    }
+
     arImageInput.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
@@ -447,20 +581,9 @@
       };
     });
 
-    // 一鍵清空並移除圖片與點位
     document.getElementById('clear-img-btn').addEventListener('click', () => {
-      imgEnabledCheckbox.checked = false;
-      arImageInput.value = '';
-      existingImageUrl = '';
-      hotspotsData = [];
-      previewImgEl.removeAttribute('src');
-      editorWrap.style.display = 'none';
+      clearImageLayerState();
       currentImgHint.innerText = '🗑️ 已清空移除圖片圖層';
-      if (previewImgMesh) {
-        previewImgGroup.remove(previewImgMesh);
-        previewImgMesh = null;
-      }
-      renderHotspotEditorUI();
     });
 
     function syncHotspotInputsFromDOM() {
@@ -559,75 +682,247 @@
       previewImgMesh.geometry = new THREE.PlaneGeometry(planeW, planeH);
     });
 
-    // 啟動時自動讀取既有 config.json，僅載入實際存在的影片與圖片
-    async function loadExistingConfig() {
+    // =========================================================
+    // 多專案管理核心：讀取專案清單、切換載入與刪除專案
+    // =========================================================
+    async function fetchProjectListFromGitHub() {
+      const repo = sanitizeRepoString(repoInput.value);
+      const branch = branchInput.value.trim() || 'main';
+      const token = tokenInput.value.trim();
+      const status = document.getElementById('status');
+
+      if (!repo) return;
+
       try {
-        const res = await fetch(`./config.json?t=${Date.now()}`);
-        if (!res.ok) {
-          videoLayers.push(createVideoLayerObject({ px: 0, py: 0 }));
-          renderVideoCardsUI();
-          return;
-        }
-        const cfg = await res.json();
+        const headers = { "Accept": "application/vnd.github+json" };
+        if (token) headers["Authorization"] = `Bearer ${token}`;
 
-        document.getElementById('banner-enabled').checked = (cfg.bannerEnabled !== false);
-        if (cfg.redirectUrl) document.getElementById('redirect-url').value = cfg.redirectUrl;
-        if (cfg.bannerText !== undefined) document.getElementById('banner-text').value = cfg.bannerText;
-        if (cfg.bannerPosY !== undefined) document.getElementById('banner-y').value = cfg.bannerPosY;
-        updateBannerPreview();
+        const res = await fetch(`https://api.github.com/repos/${repo}/contents/projects?ref=${branch}&_t=${Date.now()}`, { headers });
+        const existingSelection = projectSelect.value;
 
-        // 載入既有影片圖層 (先驗證伺服器上是否真的有該檔案，自動過濾無效空路徑)
-        videoLayers = [];
-        if (Array.isArray(cfg.videos)) {
-          for (let i = 0; i < cfg.videos.length; i++) {
-            const vConf = cfg.videos[i];
-            if (!vConf || !vConf.url) continue;
-            try {
-              const check = await fetch(`${vConf.url}?t=${Date.now()}`, { method: 'HEAD' });
-              if (check.ok) {
-                videoLayers.push(createVideoLayerObject(vConf));
-              }
-            } catch (e) {}
+        projectSelect.innerHTML = `<option value="">[根目錄預設專案 (相容舊版 QR)]</option>`;
+
+        if (res.ok) {
+          const items = await res.json();
+          if (Array.isArray(items)) {
+            items.filter(item => item.type === 'dir').forEach(dir => {
+              const opt = document.createElement('option');
+              opt.value = dir.name;
+              opt.innerText = `📦 專案：${dir.name}`;
+              projectSelect.appendChild(opt);
+            });
           }
         }
-        renderVideoCardsUI();
 
-        // 載入既有互動圖片
-        if (cfg.imageLayer) {
-          imgEnabledCheckbox.checked = !!cfg.imageLayer.enabled;
-          if (cfg.imageLayer.px !== undefined) document.getElementById('img-px').value = cfg.imageLayer.px;
-          if (cfg.imageLayer.py !== undefined) document.getElementById('img-py').value = cfg.imageLayer.py;
-          if (cfg.imageLayer.pz !== undefined) document.getElementById('img-pz').value = cfg.imageLayer.pz;
-          if (cfg.imageLayer.scale !== undefined) document.getElementById('img-scale').value = cfg.imageLayer.scale;
-          if (cfg.imageLayer.ry !== undefined) document.getElementById('img-ry').value = cfg.imageLayer.ry;
-          if (cfg.imageLayer.rz !== undefined) document.getElementById('img-rz').value = cfg.imageLayer.rz;
-
-          if (Array.isArray(cfg.imageLayer.hotspots)) {
-            hotspotsData = cfg.imageLayer.hotspots;
-            renderHotspotEditorUI();
-          }
-          if (cfg.imageLayer.enabled && cfg.imageLayer.url) {
-            const imgCheck = await fetch(`${cfg.imageLayer.url}?t=${Date.now()}`, { method: 'HEAD' });
-            if (imgCheck.ok) {
-              existingImageUrl = cfg.imageLayer.url;
-              currentImgHint.innerText = `📁 目前沿用線上圖片：${existingImageUrl}`;
-              previewImgEl.src = `${existingImageUrl}?t=${Date.now()}`;
-              editorWrap.style.display = 'block';
-              previewImgEl.onload = () => {
-                currentImageAspect = (previewImgEl.naturalWidth || 1) / (previewImgEl.naturalHeight || 1);
-                rebuild3DImagePreview(previewImgEl.src);
-              };
-            }
-          }
+        // 若剛建立的新專案尚未推送到 GitHub，仍保留在下拉選單中
+        if (existingSelection && !Array.from(projectSelect.options).some(o => o.value === existingSelection)) {
+          const opt = document.createElement('option');
+          opt.value = existingSelection;
+          opt.innerText = `✨ 新專案 (待發布)：${existingSelection}`;
+          projectSelect.appendChild(opt);
         }
+
+        projectSelect.value = existingSelection;
       } catch (e) {
-        if (videoLayers.length === 0) {
-          videoLayers.push(createVideoLayerObject({ px: 0, py: 0 }));
-          renderVideoCardsUI();
+        console.warn("讀取專案列表:", e);
+      }
+    }
+
+    // 載入指定專案的設定檔 (優先透過 GitHub API 直接抓取最新內容，無快取延遲)
+    async function loadProjectConfig(projId) {
+      currentProjectId = projId;
+      previewBadge.innerText = projId ? `目前編輯專案：${projId}` : `目前編輯專案：預設專案 (Root)`;
+      deleteProjectBtn.style.display = projId ? 'inline-block' : 'none';
+      document.getElementById('target-file').value = '';
+
+      // 先清空 3D 預覽與表單狀態
+      clearAllVideoLayers();
+      clearImageLayerState();
+
+      const repo = sanitizeRepoString(repoInput.value);
+      const branch = branchInput.value.trim() || 'main';
+      const token = tokenInput.value.trim();
+      const prefix = getProjectPrefix(projId);
+
+      // 檢查該專案是否已有 targets.mind
+      currentProjectHasMindFile = false;
+      try {
+        const mindUrl = resolveProjectAssetUrl('targets.mind', projId);
+        const mindRes = await fetch(`${mindUrl}?t=${Date.now()}`, { method: 'HEAD' });
+        if (mindRes.ok) currentProjectHasMindFile = true;
+      } catch (e) {}
+
+      targetMindHint.style.color = currentProjectHasMindFile ? '#0284c7' : '#f59e0b';
+      targetMindHint.innerText = currentProjectHasMindFile
+        ? `✅ 此專案已有 targets.mind（若不更換辨識圖可留空）`
+        : `⚠️ 此為新專案，首次發布請務必選擇上傳一張實體掃描圖卡！`;
+
+      let cfg = null;
+
+      // 1. 嘗試透過 GitHub API 讀取最新 config.json
+      if (repo && token) {
+        try {
+          const apiRes = await fetch(`https://api.github.com/repos/${repo}/contents/${prefix}config.json?ref=${branch}&_t=${Date.now()}`, {
+            headers: { "Authorization": `Bearer ${token}`, "Accept": "application/vnd.github+json" }
+          });
+          if (apiRes.ok) {
+            const fileData = await apiRes.json();
+            const jsonStr = decodeURIComponent(escape(atob(fileData.content.replace(/\s/g, ''))));
+            cfg = JSON.parse(jsonStr);
+          }
+        } catch (e) {}
+      }
+
+      // 2. 若未填 Token 或 API 未取得，退回使用相對路徑讀取
+      if (!cfg) {
+        try {
+          const localRes = await fetch(`${resolveProjectAssetUrl('config.json', projId)}?t=${Date.now()}`);
+          if (localRes.ok) cfg = await localRes.json();
+        } catch (e) {}
+      }
+
+      updateQRDisplay();
+
+      // 若為全新專案 (尚無 config.json)，初始化空白預設值
+      if (!cfg) {
+        document.getElementById('project-name-input').value = projId ? `產品專案 ${projId}` : '';
+        document.getElementById('banner-enabled').checked = true;
+        document.getElementById('redirect-url').value = 'https://example.com';
+        document.getElementById('banner-text').value = '👉 點擊任意影片前往官方網站！';
+        document.getElementById('banner-y').value = 0.65;
+        updateBannerPreview();
+        videoLayers.push(createVideoLayerObject({ px: 0, py: 0 }));
+        renderVideoCardsUI();
+        return;
+      }
+
+      // 還原既有專案設定
+      document.getElementById('project-name-input').value = cfg.projectName || '';
+      document.getElementById('banner-enabled').checked = (cfg.bannerEnabled !== false);
+      if (cfg.redirectUrl) document.getElementById('redirect-url').value = cfg.redirectUrl;
+      if (cfg.bannerText !== undefined) document.getElementById('banner-text').value = cfg.bannerText;
+      if (cfg.bannerPosY !== undefined) document.getElementById('banner-y').value = cfg.bannerPosY;
+      updateBannerPreview();
+
+      if (Array.isArray(cfg.videos)) {
+        for (let i = 0; i < cfg.videos.length; i++) {
+          const vConf = cfg.videos[i];
+          if (!vConf || !vConf.url) continue;
+          videoLayers.push(createVideoLayerObject(vConf));
+        }
+      }
+      renderVideoCardsUI();
+
+      if (cfg.imageLayer) {
+        imgEnabledCheckbox.checked = !!cfg.imageLayer.enabled;
+        if (cfg.imageLayer.px !== undefined) document.getElementById('img-px').value = cfg.imageLayer.px;
+        if (cfg.imageLayer.py !== undefined) document.getElementById('img-py').value = cfg.imageLayer.py;
+        if (cfg.imageLayer.pz !== undefined) document.getElementById('img-pz').value = cfg.imageLayer.pz;
+        if (cfg.imageLayer.scale !== undefined) document.getElementById('img-scale').value = cfg.imageLayer.scale;
+        if (cfg.imageLayer.ry !== undefined) document.getElementById('img-ry').value = cfg.imageLayer.ry;
+        if (cfg.imageLayer.rz !== undefined) document.getElementById('img-rz').value = cfg.imageLayer.rz;
+
+        if (Array.isArray(cfg.imageLayer.hotspots)) {
+          hotspotsData = cfg.imageLayer.hotspots;
+          renderHotspotEditorUI();
+        }
+        if (cfg.imageLayer.enabled && cfg.imageLayer.url) {
+          const resolvedImg = resolveProjectAssetUrl(cfg.imageLayer.url, projId);
+          existingImageUrl = resolvedImg;
+          currentImgHint.innerText = `📁 目前沿用專案圖片：${resolvedImg}`;
+          previewImgEl.src = `${resolvedImg}?t=${Date.now()}`;
+          editorWrap.style.display = 'block';
+          previewImgEl.onload = () => {
+            currentImageAspect = (previewImgEl.naturalWidth || 1) / (previewImgEl.naturalHeight || 1);
+            rebuild3DImagePreview(previewImgEl.src);
+          };
         }
       }
     }
-    loadExistingConfig();
+
+    // 綁定專案切換與新增事件
+    document.getElementById('sync-projects-btn').addEventListener('click', async () => {
+      await fetchProjectListFromGitHub();
+      await loadProjectConfig(projectSelect.value);
+    });
+
+    projectSelect.addEventListener('change', () => {
+      loadProjectConfig(projectSelect.value);
+    });
+
+    document.getElementById('create-project-btn').addEventListener('click', async () => {
+      const rawId = document.getElementById('new-project-id').value.trim();
+      const safeId = rawId.replace(/[^a-zA-Z0-9_-]/g, '');
+      if (!safeId) {
+        alert("請輸入有效的專案代號（僅限英文字母、數字、底線 _ 或連字號 -，例如 product_01）！");
+        return;
+      }
+
+      if (!Array.from(projectSelect.options).some(o => o.value === safeId)) {
+        const opt = document.createElement('option');
+        opt.value = safeId;
+        opt.innerText = `✨ 新專案 (待發布)：${safeId}`;
+        projectSelect.appendChild(opt);
+      }
+
+      projectSelect.value = safeId;
+      document.getElementById('new-project-id').value = '';
+      await loadProjectConfig(safeId);
+    });
+
+    // 刪除整個產品專案資料夾內之檔案
+    deleteProjectBtn.addEventListener('click', async () => {
+      if (!currentProjectId) return;
+      if (!confirm(`確定要刪除「${currentProjectId}」專案嗎？此操作將從 GitHub 移除該專案設定檔！`)) return;
+
+      const repo = sanitizeRepoString(repoInput.value);
+      const branch = branchInput.value.trim() || 'main';
+      const token = tokenInput.value.trim();
+      const status = document.getElementById('status');
+
+      if (!repo || !token) {
+        alert("請先填寫 GitHub 儲存庫與 Token！");
+        return;
+      }
+
+      try {
+        status.style.color = "#f59e0b";
+        status.innerText = `⏳ 正在從 GitHub 移除專案 ${currentProjectId}...`;
+
+        const cfgPath = `projects/${currentProjectId}/config.json`;
+        const getRes = await fetch(`https://api.github.com/repos/${repo}/contents/${cfgPath}?ref=${branch}&_t=${Date.now()}`, {
+          headers: { "Authorization": `Bearer ${token}`, "Accept": "application/vnd.github+json" }
+        });
+
+        if (getRes.ok) {
+          const fileData = await getRes.json();
+          await fetch(`https://api.github.com/repos/${repo}/contents/${cfgPath}`, {
+            method: "DELETE",
+            headers: {
+              "Authorization": `Bearer ${token}`,
+              "Accept": "application/vnd.github+json",
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ message: `Delete project ${currentProjectId}`, sha: fileData.sha, branch })
+          });
+        }
+
+        status.style.color = "#10b981";
+        status.innerText = `✅ 已刪除專案 ${currentProjectId}`;
+        projectSelect.value = "";
+        await fetchProjectListFromGitHub();
+        await loadProjectConfig("");
+      } catch (err) {
+        status.style.color = "#ef4444";
+        status.innerText = `❌ 刪除失敗：${err.message}`;
+      }
+    });
+
+    // 初始載入
+    (async () => {
+      await fetchProjectListFromGitHub();
+      await loadProjectConfig("");
+    })();
 
     function animatePreview() {
       requestAnimationFrame(animatePreview);
@@ -657,23 +952,9 @@
       renderer.setSize(previewArea.clientWidth, previewArea.clientHeight);
     });
 
-    function sanitizeRepoString(input) {
-      let cleaned = input.trim();
-      cleaned = cleaned.replace(/^https?:\/\/github\.com\//i, '');
-      cleaned = cleaned.replace(/\.git$/i, '');
-      cleaned = cleaned.replace(/\s+/g, '');
-      cleaned = cleaned.replace(/^\/+|\/+$/g, '');
-      return cleaned;
-    }
-
-    function getViewerProductionUrl(repo) {
-      const parts = repo.split('/');
-      if (parts.length === 2) {
-        return `https://${parts[0]}.github.io/${parts[1]}/viewer.html`;
-      }
-      return `${window.location.origin}${window.location.pathname.replace('index.html', '')}viewer.html`;
-    }
-
+    // =========================================================
+    // GitHub API 上傳與多專案隔離發布邏輯
+    // =========================================================
     function fileToBase64(fileOrBlob) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -727,45 +1008,55 @@
         return;
       }
 
+      const targetFile = document.getElementById('target-file').files[0];
+      if (!targetFile && !currentProjectHasMindFile) {
+        if (!confirm("系統偵測到此新專案尚未上傳過「1. 實體掃描圖卡」，若不選擇圖卡，手機端將無法辨識目標。確定仍要繼續嗎？")) {
+          return;
+        }
+      }
+
       localStorage.setItem('ar_gh_repo', repo);
       localStorage.setItem('ar_gh_branch', branch);
       localStorage.setItem('ar_gh_token', token);
+
+      const prefix = getProjectPrefix(currentProjectId);
+      const projLabel = currentProjectId || '預設專案 (Root)';
 
       btn.disabled = true;
       status.style.color = "#0284c7";
 
       try {
-        // A. 編譯並上傳掃描圖卡 targets.mind
-        const targetFile = document.getElementById('target-file').files[0];
+        // A. 編譯並上傳掃描圖卡至該專案專屬目錄
         if (targetFile) {
-          status.innerText = "⏳ 正在編譯掃描圖卡 targets.mind...";
+          status.innerText = `⏳ [${projLabel}] 正在編譯掃描圖卡 targets.mind...`;
           const img = new Image();
           img.src = URL.createObjectURL(targetFile);
           await new Promise(r => img.onload = r);
 
           const compiler = new window.MindARCompiler();
           await compiler.compileImageTargets([img], (p) => {
-            status.innerText = `⏳ 正在編譯圖卡特徵... ${p.toFixed(0)}%`;
+            status.innerText = `⏳ [${projLabel}] 正在編譯圖卡特徵... ${p.toFixed(0)}%`;
           });
           const exportedBuffer = await compiler.exportData();
           const mindBlob = new Blob([exportedBuffer]);
           const mindB64 = await fileToBase64(mindBlob);
-          status.innerText = "⏳ 正在上傳 targets.mind...";
-          await uploadToGitHub(repo, branch, token, "targets.mind", mindB64, "Update targets.mind");
+          status.innerText = `⏳ [${projLabel}] 正在上傳 ${prefix}targets.mind...`;
+          await uploadToGitHub(repo, branch, token, `${prefix}targets.mind`, mindB64, `Update ${prefix}targets.mind`);
+          currentProjectHasMindFile = true;
         }
 
-        // B. 僅針對清單中「保留且有效」的影片進行上傳與寫入 (徹底排除已刪除的舊影片)
+        // B. 上傳清單中保留的影片至該專案專屬目錄
         const videosConfig = [];
         for (let i = 0; i < videoLayers.length; i++) {
           const layer = videoLayers[i];
           let finalVideoUrl = layer.url;
 
           if (layer.file) {
-            const vPath = `videos/video_${layer.id}.mp4`;
-            status.innerText = `⏳ 正在上傳影片 #${i + 1} (${layer.file.name})...`;
+            const vRepoPath = `${prefix}videos/video_${layer.id}.mp4`;
+            status.innerText = `⏳ [${projLabel}] 正在上傳影片 #${i + 1} (${layer.file.name})...`;
             const vB64 = await fileToBase64(layer.file);
-            await uploadToGitHub(repo, branch, token, vPath, vB64, `Upload ${vPath}`);
-            finalVideoUrl = `./${vPath}`;
+            await uploadToGitHub(repo, branch, token, vRepoPath, vB64, `Upload ${vRepoPath}`);
+            finalVideoUrl = `./${vRepoPath}`;
             layer.url = finalVideoUrl;
             layer.file = null;
           }
@@ -788,21 +1079,23 @@
           }
         }
 
-        // C. 處理 AR 互動圖片上傳
+        // C. 處理 AR 互動圖片上傳至該專案專屬目錄
         const arImgFile = arImageInput.files[0];
         let finalImgUrl = existingImageUrl;
         if (arImgFile && imgEnabledCheckbox.checked) {
-          const imgPath = `images/ar_overlay.png`;
-          status.innerText = "⏳ 正在上傳 AR 互動圖片...";
+          const imgRepoPath = `${prefix}images/ar_overlay.png`;
+          status.innerText = `⏳ [${projLabel}] 正在上傳 AR 互動圖片...`;
           const imgB64 = await fileToBase64(arImgFile);
-          await uploadToGitHub(repo, branch, token, imgPath, imgB64, "Update AR interactive image");
-          finalImgUrl = `./${imgPath}`;
+          await uploadToGitHub(repo, branch, token, imgRepoPath, imgB64, `Update ${imgRepoPath}`);
+          finalImgUrl = `./${imgRepoPath}`;
           existingImageUrl = finalImgUrl;
         }
 
-        // D. 更新 config.json
-        status.innerText = "⏳ 正在更新 config.json 設定檔...";
+        // D. 更新該專案專屬的 config.json
+        status.innerText = `⏳ [${projLabel}] 正在更新 ${prefix}config.json 設定檔...`;
         const configObj = {
+          projectId: currentProjectId || "root",
+          projectName: document.getElementById('project-name-input').value.trim(),
           bannerEnabled: document.getElementById('banner-enabled').checked,
           redirectUrl: normalizeUrl(document.getElementById('redirect-url').value) || "https://example.com",
           bannerText: document.getElementById('banner-text').value,
@@ -822,17 +1115,15 @@
         };
 
         const configB64 = btoa(unescape(encodeURIComponent(JSON.stringify(configObj, null, 2))));
-        await uploadToGitHub(repo, branch, token, "config.json", configB64, "Update modular config.json");
+        await uploadToGitHub(repo, branch, token, `${prefix}config.json`, configB64, `Update ${prefix}config.json`);
 
+        await fetchProjectListFromGitHub();
         renderVideoCardsUI();
+        updateQRDisplay();
 
-        const qrContainer = document.getElementById('qrcode');
-        qrContainer.innerHTML = "";
-        const viewerUrl = getViewerProductionUrl(repo);
-        new QRCode(qrContainer, { text: viewerUrl, width: 150, height: 150 });
-
+        const viewerUrl = getViewerProductionUrl(repo, currentProjectId);
         status.style.color = "#10b981";
-        status.innerText = `✅ 發布成功！（目前保留 ${videosConfig.length} 支影片）\n觀看端網址：\n${viewerUrl}`;
+        status.innerText = `✅ 專案【${projLabel}】發布成功！\n專屬觀看網址：\n${viewerUrl}`;
       } catch (err) {
         console.error(err);
         status.style.color = "#ef4444";
