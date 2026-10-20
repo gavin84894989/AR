@@ -92,6 +92,12 @@
       text-align: center; padding: 20px;
     }
 
+    #project-badge {
+      font-size: 12px; color: #38bdf8; background: rgba(56, 189, 248, 0.15);
+      border: 1px solid rgba(56, 189, 248, 0.4); padding: 4px 12px;
+      border-radius: 12px; margin-bottom: 10px;
+    }
+
     #start-btn {
       padding: 15px 36px; font-size: 18px; border: none; border-radius: 30px;
       background: #007aff; color: white; cursor: pointer; font-weight: bold;
@@ -111,7 +117,8 @@
   <div id="tracker-hud">🟡 正在尋找目標圖卡...</div>
 
   <div id="overlay">
-    <h2>WebAR 互動體驗</h2>
+    <div id="project-badge">專案載入中...</div>
+    <h2 id="project-title">WebAR 互動體驗</h2>
     <button id="start-btn" disabled>連線中...</button>
     <div id="status-msg">正在檢查環境與載入設定檔...</div>
   </div>
@@ -128,6 +135,23 @@
     const hud = document.getElementById('tracker-hud');
     const preloadPool = document.getElementById('video-preload-pool');
     const arLinkLayer = document.getElementById('ar-link-layer');
+    const projectBadge = document.getElementById('project-badge');
+    const projectTitleEl = document.getElementById('project-title');
+
+    // 解析網址參數 ?id=專案代號 (若無參數則預設讀取根目錄，100% 向下相容舊版 QR Code)
+    const urlParams = new URLSearchParams(window.location.search);
+    const currentProjectId = (urlParams.get('id') || '').trim();
+    projectBadge.innerText = currentProjectId ? `產品專案：${currentProjectId}` : `預設專案 (Root)`;
+
+    // 智慧路徑解析：自動將相對路徑對應至專屬專案資料夾 ./projects/{id}/
+    function resolveProjectAssetUrl(rawPath) {
+      if (!rawPath) return '';
+      if (/^https?:\/\//i.test(rawPath)) return rawPath;
+      const clean = rawPath.replace(/^\.\//, '').replace(/^\/+/, '');
+      if (!currentProjectId) return `./${clean}`;
+      if (clean.startsWith(`projects/${currentProjectId}/`)) return `./${clean}`;
+      return `./projects/${currentProjectId}/${clean}`;
+    }
 
     let THREE = null;
     let MindARThree = null;
@@ -219,10 +243,18 @@
       if (checkInAppBrowser()) return;
 
       try {
-        statusMsg.innerText = "⏳ 1/3 正在讀取 config.json 設定檔...";
-        const res = await fetch(`./config.json?t=${Date.now()}`);
-        if (!res.ok) throw new Error(`找不到 config.json (HTTP ${res.status})`);
+        const configPath = resolveProjectAssetUrl('config.json');
+        statusMsg.innerText = `⏳ 1/3 正在讀取專案設定檔 (${configPath})...`;
+        const res = await fetch(`${configPath}?t=${Date.now()}`);
+        if (!res.ok) {
+          throw new Error(`找不到此專案的設定檔 (${configPath})\n請確認專案代號是否正確，或先由後台完成發布！`);
+        }
         config = await res.json();
+
+        if (config.projectName) {
+          projectTitleEl.innerText = config.projectName;
+          document.title = `AR 觀看端 - ${config.projectName}`;
+        }
 
         statusMsg.innerText = "⏳ 2/3 正在載入 3D 與 AR 核心引擎...";
         THREE = await import('three');
@@ -241,10 +273,11 @@
             const vConf = config.videos[i];
             if (!vConf || vConf.enabled === false || !vConf.url) continue;
 
-            const exists = await checkAssetExists(vConf.url);
+            const resolvedVideoUrl = resolveProjectAssetUrl(vConf.url);
+            const exists = await checkAssetExists(resolvedVideoUrl);
             if (exists) {
               const v = document.createElement('video');
-              v.src = `${vConf.url}?t=${Date.now()}`;
+              v.src = `${resolvedVideoUrl}?t=${Date.now()}`;
               v.loop = true;
               v.muted = true;
               v.playsInline = true;
@@ -268,9 +301,10 @@
         }
 
         if (config.imageLayer && config.imageLayer.enabled && config.imageLayer.url) {
-          const imgExists = await checkAssetExists(config.imageLayer.url);
+          const resolvedImgUrl = resolveProjectAssetUrl(config.imageLayer.url);
+          const imgExists = await checkAssetExists(resolvedImgUrl);
           if (imgExists) {
-            validImageLayer = config.imageLayer;
+            validImageLayer = { ...config.imageLayer, resolvedUrl: resolvedImgUrl };
           }
         }
 
@@ -298,10 +332,11 @@
 
       try {
         const container = document.querySelector("#ar-container");
+        const mindPath = resolveProjectAssetUrl('targets.mind');
 
         const mindarThree = new MindARThree({
           container: container,
-          imageTargetSrc: `./targets.mind?t=${Date.now()}`,
+          imageTargetSrc: `${mindPath}?t=${Date.now()}`,
           uiLoading: "no",
           uiScanning: "no",
           filterMinCF: 0.001,
@@ -446,7 +481,7 @@
 
           const texLoader = new THREE.TextureLoader();
           texLoader.setCrossOrigin("anonymous");
-          texLoader.load(`${validImageLayer.url}?t=${Date.now()}`, (imgTex) => {
+          texLoader.load(`${validImageLayer.resolvedUrl}?t=${Date.now()}`, (imgTex) => {
             const imgW = imgTex.image.width || 1;
             const imgH = imgTex.image.height || 1;
             const aspect = imgW / imgH;
@@ -468,10 +503,8 @@
               halfH: planeH / 2
             };
             imgGroup.add(imgMesh);
-            // 圖片本體綁定預設連結 (z-index: 50)
             registerDomLinkForMesh(imgMesh, defaultRedirectUrl, 50, 0);
 
-            // 圖片上的各個透明點位綁定專屬連結 (z-index: 65 最高優先級)
             const hotspots = Array.isArray(validImageLayer.hotspots) ? validImageLayer.hotspots : [];
             hotspots.forEach((spot) => {
               const spotTargetUrl = normalizeUrl(spot.url) || defaultRedirectUrl;
@@ -596,10 +629,8 @@
             }
           });
 
-          // 先執行 3D 場景渲染，確保所有矩陣皆已更新
           renderer.render(scene, camera);
 
-          // 同步更新每個 3D 物件對應的透明 <a target="_blank"> 螢幕座標
           const isLinkActive = isTargetLocked || (now - lastLockedTime < 1500);
           if (!isLinkActive) {
             for (let i = 0; i < trackedDomLinks.length; i++) {
@@ -620,7 +651,6 @@
             const el = item.anchorEl;
             const pad = item.padPx;
 
-            // 注意：geometry 本身若是 basePlaneHeight 且透過 mesh.scale.x 縮放，局部座標直接取 geometry 頂點半寬即可讓 matrixWorld 自動包含 scale
             const geomParams = mesh.geometry.parameters;
             const localHW = (geomParams && geomParams.width) ? geomParams.width / 2 : (mesh.userData.halfW || 0.25);
             const localHH = (geomParams && geomParams.height) ? geomParams.height / 2 : (mesh.userData.halfH || 0.25);
