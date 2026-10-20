@@ -23,13 +23,15 @@
       background: rgba(15, 23, 42, 0.85); border: 1px solid #007aff;
       color: #fff; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: bold;
     }
-    #sidebar { width: 450px; background: #ffffff; color: #1e293b; padding: 18px; overflow-y: auto; border-left: 1px solid #cbd5e1; }
+    #sidebar { width: 460px; background: #ffffff; color: #1e293b; padding: 18px; overflow-y: auto; border-left: 1px solid #cbd5e1; }
     h2 { margin: 0 0 14px 0; font-size: 18px; color: #0f172a; border-bottom: 2px solid #007aff; padding-bottom: 8px; }
     .card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 14px; position: relative; }
     .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
     .card h3 { margin: 0; font-size: 14px; color: #007aff; }
     label { display: block; font-size: 12px; font-weight: 600; margin: 6px 0 3px; color: #475569; }
-    input[type="text"], input[type="password"], select { width: 100%; padding: 7px 9px; border: 1px solid #cbd5e1; border-radius: 5px; font-size: 13px; background: #fff; }
+    input[type="text"], input[type="password"], input[type="number"], select {
+      width: 100%; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 5px; font-size: 12px; background: #fff;
+    }
     input[type="file"] { font-size: 12px; width: 100%; }
     input[type="range"] { width: 100%; margin: 2px 0; }
     .row { display: flex; gap: 8px; align-items: center; }
@@ -54,7 +56,7 @@
     }
     .btn-add-layer:hover { background: #dbeafe; }
 
-    /* 原圖上的標記設為完全透明 (opacity: 0) */
+    /* 後台點位範圍視覺化編輯器 (手機觀看端仍為 100% 透明無標記) */
     #hotspot-editor-wrap { margin-top: 10px; display: none; }
     #hotspot-canvas-box {
       position: relative; width: 100%; border: 1px solid #cbd5e1; border-radius: 6px;
@@ -63,23 +65,33 @@
     #hotspot-preview-img {
       width: 100%; display: block; user-select: none; -webkit-user-drag: none;
     }
-    .hs-pin {
-      position: absolute; width: 24px; height: 24px; border-radius: 50%;
-      background: transparent !important; border: none !important; color: transparent !important;
-      opacity: 0 !important;
-      transform: translate(-50%, -50%); pointer-events: none;
+    /* 後台虛線範圍預覽框 (方便調整點位大小，不會寫入原圖，觀看端完全透明) */
+    .hs-zone-preview {
+      position: absolute;
+      border: 2px dashed rgba(0, 122, 255, 0.85);
+      background: rgba(0, 122, 255, 0.12);
+      color: #007aff; font-size: 11px; font-weight: bold;
+      display: flex; align-items: center; justify-content: center;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      border-radius: 6px;
     }
-    .hs-item {
-      display: flex; gap: 5px; align-items: center; margin-top: 6px;
-      background: #fff; padding: 6px; border: 1px solid #cbd5e1; border-radius: 5px;
+
+    /* 進階點位設定卡 (支援大小滑桿、長短按秒數與雙連結) */
+    .hs-card {
+      background: #ffffff; border: 1px solid #cbd5e1; border-left: 4px solid #007aff;
+      border-radius: 6px; padding: 8px 10px; margin-top: 8px;
+    }
+    .hs-card-top {
+      display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;
     }
     .hs-badge {
-      background: #475569; color: #fff; font-weight: bold; font-size: 11px;
-      padding: 2px 6px; border-radius: 4px; white-space: nowrap;
+      background: #0f172a; color: #fff; font-weight: bold; font-size: 11px;
+      padding: 3px 8px; border-radius: 4px;
     }
     .hs-del-btn {
       background: #ef4444; color: #fff; border: none; border-radius: 4px;
-      padding: 4px 8px; cursor: pointer; font-size: 12px; font-weight: bold;
+      padding: 3px 8px; cursor: pointer; font-size: 11px; font-weight: bold;
     }
 
     #publish-btn {
@@ -118,7 +130,7 @@
       <input type="password" id="gh-token" placeholder="ghp_xxxxxxxxxxxx">
     </div>
 
-    <!-- 0. 新增：多產品專案管理中心 -->
+    <!-- 0. 多產品專案管理中心 -->
     <div class="card" style="border: 2px solid #007aff; background: #eff6ff;">
       <div class="card-header">
         <h3>0. 多產品專案管理中心</h3>
@@ -150,26 +162,26 @@
       <div id="target-mind-hint" class="hint">若本專案已上傳過 targets.mind 且不換圖，可留空</div>
     </div>
 
-    <!-- 2. 跳轉網址與浮空提示看板 -->
+    <!-- 2. 浮空提示看板 (純展示，不觸發連結) -->
     <div class="card">
       <div class="card-header">
-        <h3>2. 預設連結與浮空提示看板</h3>
+        <h3>2. 浮空提示看板 (純展示)</h3>
         <label style="margin:0; display:flex; align-items:center; gap:4px; cursor:pointer;">
           <input type="checkbox" id="banner-enabled" checked> 顯示看板
         </label>
       </div>
-      <label>點擊後跳轉目標網址 (Redirect URL 預設連結)</label>
+      <label>預設網址範本 (新增點位時自動帶入此網址)</label>
       <input type="text" id="redirect-url" value="https://example.com">
       <label>上方對話框顯示文字</label>
-      <input type="text" id="banner-text" value="👉 點擊任意影片前往官方網站！">
+      <input type="text" id="banner-text" value="👉 點擊圖片點位開啟連結！">
       <label>提示看板垂直高度 (Y)</label>
       <input type="range" id="banner-y" min="-1" max="1.5" step="0.05" value="0.65">
     </div>
 
-    <!-- 3. AR 互動圖片與透明點位設定 -->
+    <!-- 3. AR 互動圖片與「可調大小 ＋ 長短按雙連結」點位設定 -->
     <div class="card" style="border-color: #38bdf8; background: #f0f9ff;">
       <div class="card-header">
-        <h3>3. AR 互動圖片與透明點位</h3>
+        <h3>3. AR 互動圖片與點位設定 (唯一可點擊區)</h3>
         <button type="button" id="clear-img-btn" class="btn-del-card">🗑️ 清空移除圖片</button>
       </div>
       <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
@@ -193,23 +205,27 @@
       </div>
 
       <div id="hotspot-editor-wrap">
-        <label style="color:#0284c7; font-weight:bold;">👇 點擊下方圖片新增透明點位（網址留空則自動連往預設連結）：</label>
+        <label style="color:#0284c7; font-weight:bold;">👇 點擊下方圖片新增點位（虛線框僅供後台確認範圍，手機端完全透明）：</label>
         <div id="hotspot-canvas-box">
           <img id="hotspot-preview-img" alt="AR 互動圖片預覽">
           <div id="hotspot-pins-layer"></div>
+        </div>
+        <div class="row" style="margin-top:6px; justify-content:space-between;">
+          <label style="margin:0; display:flex; align-items:center; gap:4px; cursor:pointer; font-size:11px;">
+            <input type="checkbox" id="show-zone-helper" checked> 於後台圖片顯示感應範圍虛線框
+          </label>
         </div>
         <div id="hotspot-list"></div>
       </div>
     </div>
 
-    <!-- 4. 動態增刪去背影片清單 -->
+    <!-- 4. 動態增刪去背影片清單 (純視覺展示) -->
     <div id="video-controls"></div>
     <button type="button" id="add-video-btn" class="btn-add-layer">＋ 新增去背影片圖層</button>
 
     <button id="publish-btn">🚀 一鍵發布此專案至 GitHub 並產生 QR</button>
     <div id="status"></div>
 
-    <!-- 專屬 QR Code 與網址區塊 -->
     <div id="qr-box">
       <div style="font-size:12px; font-weight:bold; color:#0f172a; margin-bottom:6px;">📱 此產品專案專屬 AR QR Code：</div>
       <div id="qrcode"></div>
@@ -247,7 +263,6 @@
     branchInput.value = localStorage.getItem('ar_gh_branch') || 'main';
     tokenInput.value = localStorage.getItem('ar_gh_token') || '';
 
-    // 目前選取的產品專案代號 (空字串代表根目錄預設專案)
     let currentProjectId = "";
     let currentProjectHasMindFile = false;
 
@@ -256,7 +271,6 @@
     const previewBadge = document.getElementById('preview-badge');
     const targetMindHint = document.getElementById('target-mind-hint');
 
-    // 解析專案檔案路徑
     function getProjectPrefix(projId = currentProjectId) {
       return projId ? `projects/${projId}/` : '';
     }
@@ -408,7 +422,6 @@
         scale: initialData.scale !== undefined ? Number(initialData.scale) : 1.0,
         ry: initialData.ry !== undefined ? Number(initialData.ry) : 0,
         rz: initialData.rz !== undefined ? Number(initialData.rz) : 0,
-        linkUrl: initialData.linkUrl || "",
         videoEl: v,
         mesh,
         mat,
@@ -444,7 +457,7 @@
 
         card.innerHTML = `
           <div class="card-header">
-            <h3>去背影片圖層 #${idx + 1}</h3>
+            <h3>去背影片圖層 #${idx + 1} (純展示)</h3>
             <button type="button" class="btn-del-card" data-idx="${idx}">🗑️ 刪除此影片</button>
           </div>
           <label>選擇影片檔案 (MP4/WebM)</label>
@@ -464,8 +477,6 @@
             <div class="col"><label>側向 Y</label><input type="range" class="v-ry-in" min="-60" max="60" step="1" value="${layer.ry}"></div>
             <div class="col"><label>傾斜 Z</label><input type="range" class="v-rz-in" min="-180" max="180" step="1" value="${layer.rz}"></div>
           </div>
-          <label>此影片專屬點擊網址 (選填，留空則連往預設連結)</label>
-          <input type="text" class="v-link-in" placeholder="https://..." value="${layer.linkUrl || ''}">
         `;
 
         card.querySelector('.btn-del-card').addEventListener('click', () => {
@@ -514,7 +525,6 @@
         });
         card.querySelector('.v-ry-in').addEventListener('input', (e) => { layer.ry = Number(e.target.value); });
         card.querySelector('.v-rz-in').addEventListener('input', (e) => { layer.rz = Number(e.target.value); });
-        card.querySelector('.v-link-in').addEventListener('input', (e) => { layer.linkUrl = e.target.value.trim(); });
 
         videoControlsContainer.appendChild(card);
       });
@@ -527,7 +537,7 @@
     });
 
     // =========================================================
-    // AR 互動圖片與「全透明點位」管理
+    // AR 互動圖片與「自訂點位大小 ＋ 長短按雙連結」管理
     // =========================================================
     let hotspotsData = [];
     let currentImageAspect = 1.0;
@@ -544,6 +554,11 @@
     const previewImgEl = document.getElementById('hotspot-preview-img');
     const pinsLayer = document.getElementById('hotspot-pins-layer');
     const hotspotListEl = document.getElementById('hotspot-list');
+    const showZoneHelperCheckbox = document.getElementById('show-zone-helper');
+
+    showZoneHelperCheckbox.addEventListener('change', () => {
+      pinsLayer.style.display = showZoneHelperCheckbox.checked ? 'block' : 'none';
+    });
 
     function clearImageLayerState() {
       imgEnabledCheckbox.checked = false;
@@ -578,6 +593,7 @@
       previewImgEl.onload = () => {
         currentImageAspect = (previewImgEl.naturalWidth || 1) / (previewImgEl.naturalHeight || 1);
         rebuild3DImagePreview(objUrl);
+        renderHotspotEditorUI();
       };
     });
 
@@ -586,18 +602,22 @@
       currentImgHint.innerText = '🗑️ 已清空移除圖片圖層';
     });
 
+    // 從 DOM 同步所有點位的最新設定值 (包含點位大小、長按秒數、短按網址、長按網址)
     function syncHotspotInputsFromDOM() {
-      const defaultUrl = normalizeUrl(document.getElementById('redirect-url').value);
-      const rows = hotspotListEl.querySelectorAll('.hs-item');
-      rows.forEach((row, idx) => {
+      const cards = hotspotListEl.querySelectorAll('.hs-card');
+      cards.forEach((card, idx) => {
         if (hotspotsData[idx]) {
-          const labelInput = row.querySelector('.hs-label-in');
-          const urlInput = row.querySelector('.hs-url-in');
-          if (labelInput) hotspotsData[idx].label = labelInput.value.trim();
-          if (urlInput) {
-            const customUrl = normalizeUrl(urlInput.value);
-            hotspotsData[idx].url = customUrl || defaultUrl;
-          }
+          const labelIn = card.querySelector('.hs-label-in');
+          const radiusIn = card.querySelector('.hs-radius-in');
+          const holdIn = card.querySelector('.hs-hold-in');
+          const shortUrlIn = card.querySelector('.hs-short-url-in');
+          const longUrlIn = card.querySelector('.hs-long-url-in');
+
+          if (labelIn) hotspotsData[idx].label = labelIn.value.trim();
+          if (radiusIn) hotspotsData[idx].radius = Number(radiusIn.value);
+          if (holdIn) hotspotsData[idx].holdDuration = Math.max(0.1, Number(holdIn.value) || 0.8);
+          if (shortUrlIn) hotspotsData[idx].url = normalizeUrl(shortUrlIn.value);
+          if (longUrlIn) hotspotsData[idx].longUrl = normalizeUrl(longUrlIn.value);
         }
       });
     }
@@ -618,42 +638,103 @@
         label: `點位 ${hotspotsData.length + 1}`,
         uvX: Math.max(0, Math.min(1, uvX)),
         uvY: Math.max(0, Math.min(1, uvY)),
-        url: defaultUrl
+        radius: 0.15,        // 預設感應大小 15%
+        holdDuration: 0.8,   // 預設長按判定秒數 0.8 秒
+        url: defaultUrl,     // 短按開啟網址
+        longUrl: ""          // 長按開啟網址
       });
 
       renderHotspotEditorUI();
     });
 
-    function renderHotspotEditorUI() {
+    function updateZonePreviewBoxes() {
       pinsLayer.innerHTML = '';
+      const rect = previewImgEl.getBoundingClientRect();
+      const boxW = rect.width || 300;
+      const boxH = rect.height || 300;
+      const minPx = Math.min(boxW, boxH);
+
+      hotspotsData.forEach((spot, idx) => {
+        const radiusRatio = Number(spot.radius ?? 0.15);
+        const sizePx = Math.max(18, minPx * radiusRatio);
+
+        const zone = document.createElement('div');
+        zone.className = 'hs-zone-preview';
+        zone.style.left = `${spot.uvX * 100}%`;
+        zone.style.top = `${spot.uvY * 100}%`;
+        zone.style.width = `${sizePx}px`;
+        zone.style.height = `${sizePx}px`;
+        zone.innerText = `#${idx + 1}`;
+        pinsLayer.appendChild(zone);
+      });
+    }
+
+    function renderHotspotEditorUI() {
+      updateZonePreviewBoxes();
       hotspotListEl.innerHTML = '';
 
       hotspotsData.forEach((spot, idx) => {
-        const pin = document.createElement('div');
-        pin.className = 'hs-pin';
-        pin.style.left = `${spot.uvX * 100}%`;
-        pin.style.top = `${spot.uvY * 100}%`;
-        pinsLayer.appendChild(pin);
+        const radiusVal = Number(spot.radius ?? 0.15);
+        const holdVal = Number(spot.holdDuration ?? 0.8);
+        const coordText = `座標 (${Math.round(spot.uvX * 100)}%, ${Math.round(spot.uvY * 100)}%)`;
 
-        const coordText = `(${Math.round(spot.uvX * 100)}%, ${Math.round(spot.uvY * 100)}%)`;
-        const row = document.createElement('div');
-        row.className = 'hs-item';
-        row.innerHTML = `
-          <div class="hs-badge">#${idx + 1} ${coordText}</div>
-          <input type="text" placeholder="備註" value="${spot.label || ''}" style="width:65px;" data-idx="${idx}" class="hs-label-in">
-          <input type="text" placeholder="連結網址 (留空則用預設連結)" value="${spot.url || ''}" style="flex:1;" data-idx="${idx}" class="hs-url-in">
-          <button type="button" class="hs-del-btn" data-idx="${idx}">✕</button>
+        const card = document.createElement('div');
+        card.className = 'hs-card';
+        card.innerHTML = `
+          <div class="hs-card-top">
+            <span class="hs-badge">點位 #${idx + 1} ・ ${coordText}</span>
+            <input type="text" placeholder="備註名稱" value="${spot.label || ''}" style="width:110px;" class="hs-label-in">
+            <button type="button" class="hs-del-btn" data-idx="${idx}">✕ 刪除點位</button>
+          </div>
+
+          <div class="row" style="margin-top:4px;">
+            <div class="col">
+              <label style="margin:2px 0;">點位感應大小：<span class="hs-radius-val">${Math.round(radiusVal * 100)}%</span></label>
+              <input type="range" class="hs-radius-in" min="0.05" max="0.50" step="0.01" value="${radiusVal}">
+            </div>
+            <div style="width:125px;">
+              <label style="margin:2px 0;">長按判定秒數 (秒)</label>
+              <input type="number" class="hs-hold-in" min="0.2" max="10" step="0.1" value="${holdVal}">
+            </div>
+          </div>
+
+          <label style="color:#0284c7;">👆 短按連結 (一般點擊開啟的新網頁 URL)：</label>
+          <input type="text" class="hs-short-url-in" placeholder="https://... (短按開啟的網址)" value="${spot.url || ''}">
+
+          <label style="color:#9333ea;">⏳ 長按連結 (按住達指定秒數後開啟的新網頁 URL，選填)：</label>
+          <input type="text" class="hs-long-url-in" placeholder="https://... (長按開啟的不同網址)" value="${spot.longUrl || ''}">
         `;
-        hotspotListEl.appendChild(row);
-      });
 
-      hotspotListEl.querySelectorAll('.hs-del-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
+        // 即時調整點位大小滑桿並更新上方虛線預覽框
+        const radiusIn = card.querySelector('.hs-radius-in');
+        const radiusValSpan = card.querySelector('.hs-radius-val');
+        radiusIn.addEventListener('input', (e) => {
+          spot.radius = Number(e.target.value);
+          radiusValSpan.innerText = `${Math.round(spot.radius * 100)}%`;
+          updateZonePreviewBoxes();
+        });
+
+        card.querySelector('.hs-hold-in').addEventListener('input', (e) => {
+          spot.holdDuration = Math.max(0.1, Number(e.target.value) || 0.8);
+        });
+        card.querySelector('.hs-label-in').addEventListener('input', (e) => {
+          spot.label = e.target.value;
+        });
+        card.querySelector('.hs-short-url-in').addEventListener('input', (e) => {
+          spot.url = e.target.value.trim();
+        });
+        card.querySelector('.hs-long-url-in').addEventListener('input', (e) => {
+          spot.longUrl = e.target.value.trim();
+        });
+
+        card.querySelector('.hs-del-btn').addEventListener('click', (e) => {
           syncHotspotInputsFromDOM();
           const rmIdx = Number(e.target.dataset.idx);
           hotspotsData.splice(rmIdx, 1);
           renderHotspotEditorUI();
         });
+
+        hotspotListEl.appendChild(card);
       });
     }
 
@@ -689,7 +770,6 @@
       const repo = sanitizeRepoString(repoInput.value);
       const branch = branchInput.value.trim() || 'main';
       const token = tokenInput.value.trim();
-      const status = document.getElementById('status');
 
       if (!repo) return;
 
@@ -714,7 +794,6 @@
           }
         }
 
-        // 若剛建立的新專案尚未推送到 GitHub，仍保留在下拉選單中
         if (existingSelection && !Array.from(projectSelect.options).some(o => o.value === existingSelection)) {
           const opt = document.createElement('option');
           opt.value = existingSelection;
@@ -728,14 +807,12 @@
       }
     }
 
-    // 載入指定專案的設定檔 (優先透過 GitHub API 直接抓取最新內容，無快取延遲)
     async function loadProjectConfig(projId) {
       currentProjectId = projId;
       previewBadge.innerText = projId ? `目前編輯專案：${projId}` : `目前編輯專案：預設專案 (Root)`;
       deleteProjectBtn.style.display = projId ? 'inline-block' : 'none';
       document.getElementById('target-file').value = '';
 
-      // 先清空 3D 預覽與表單狀態
       clearAllVideoLayers();
       clearImageLayerState();
 
@@ -744,7 +821,6 @@
       const token = tokenInput.value.trim();
       const prefix = getProjectPrefix(projId);
 
-      // 檢查該專案是否已有 targets.mind
       currentProjectHasMindFile = false;
       try {
         const mindUrl = resolveProjectAssetUrl('targets.mind', projId);
@@ -759,7 +835,6 @@
 
       let cfg = null;
 
-      // 1. 嘗試透過 GitHub API 讀取最新 config.json
       if (repo && token) {
         try {
           const apiRes = await fetch(`https://api.github.com/repos/${repo}/contents/${prefix}config.json?ref=${branch}&_t=${Date.now()}`, {
@@ -773,7 +848,6 @@
         } catch (e) {}
       }
 
-      // 2. 若未填 Token 或 API 未取得，退回使用相對路徑讀取
       if (!cfg) {
         try {
           const localRes = await fetch(`${resolveProjectAssetUrl('config.json', projId)}?t=${Date.now()}`);
@@ -783,12 +857,11 @@
 
       updateQRDisplay();
 
-      // 若為全新專案 (尚無 config.json)，初始化空白預設值
       if (!cfg) {
         document.getElementById('project-name-input').value = projId ? `產品專案 ${projId}` : '';
         document.getElementById('banner-enabled').checked = true;
         document.getElementById('redirect-url').value = 'https://example.com';
-        document.getElementById('banner-text').value = '👉 點擊任意影片前往官方網站！';
+        document.getElementById('banner-text').value = '👉 點擊圖片點位開啟連結！';
         document.getElementById('banner-y').value = 0.65;
         updateBannerPreview();
         videoLayers.push(createVideoLayerObject({ px: 0, py: 0 }));
@@ -796,7 +869,6 @@
         return;
       }
 
-      // 還原既有專案設定
       document.getElementById('project-name-input').value = cfg.projectName || '';
       document.getElementById('banner-enabled').checked = (cfg.bannerEnabled !== false);
       if (cfg.redirectUrl) document.getElementById('redirect-url').value = cfg.redirectUrl;
@@ -835,12 +907,12 @@
           previewImgEl.onload = () => {
             currentImageAspect = (previewImgEl.naturalWidth || 1) / (previewImgEl.naturalHeight || 1);
             rebuild3DImagePreview(previewImgEl.src);
+            updateZonePreviewBoxes();
           };
         }
       }
     }
 
-    // 綁定專案切換與新增事件
     document.getElementById('sync-projects-btn').addEventListener('click', async () => {
       await fetchProjectListFromGitHub();
       await loadProjectConfig(projectSelect.value);
@@ -870,7 +942,6 @@
       await loadProjectConfig(safeId);
     });
 
-    // 刪除整個產品專案資料夾內之檔案
     deleteProjectBtn.addEventListener('click', async () => {
       if (!currentProjectId) return;
       if (!confirm(`確定要刪除「${currentProjectId}」專案嗎？此操作將從 GitHub 移除該專案設定檔！`)) return;
@@ -918,7 +989,6 @@
       }
     });
 
-    // 初始載入
     (async () => {
       await fetchProjectListFromGitHub();
       await loadProjectConfig("");
@@ -950,6 +1020,7 @@
       camera.aspect = previewArea.clientWidth / previewArea.clientHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(previewArea.clientWidth, previewArea.clientHeight);
+      updateZonePreviewBoxes();
     });
 
     // =========================================================
@@ -1026,7 +1097,6 @@
       status.style.color = "#0284c7";
 
       try {
-        // A. 編譯並上傳掃描圖卡至該專案專屬目錄
         if (targetFile) {
           status.innerText = `⏳ [${projLabel}] 正在編譯掃描圖卡 targets.mind...`;
           const img = new Image();
@@ -1045,7 +1115,6 @@
           currentProjectHasMindFile = true;
         }
 
-        // B. 上傳清單中保留的影片至該專案專屬目錄
         const videosConfig = [];
         for (let i = 0; i < videoLayers.length; i++) {
           const layer = videoLayers[i];
@@ -1073,13 +1142,11 @@
               py: layer.py,
               scale: layer.scale,
               ry: layer.ry,
-              rz: layer.rz,
-              linkUrl: normalizeUrl(layer.linkUrl)
+              rz: layer.rz
             });
           }
         }
 
-        // C. 處理 AR 互動圖片上傳至該專案專屬目錄
         const arImgFile = arImageInput.files[0];
         let finalImgUrl = existingImageUrl;
         if (arImgFile && imgEnabledCheckbox.checked) {
@@ -1091,7 +1158,6 @@
           existingImageUrl = finalImgUrl;
         }
 
-        // D. 更新該專案專屬的 config.json
         status.innerText = `⏳ [${projLabel}] 正在更新 ${prefix}config.json 設定檔...`;
         const configObj = {
           projectId: currentProjectId || "root",
