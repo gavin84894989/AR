@@ -27,6 +27,8 @@
       overflow: hidden; background: transparent !important;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
     }
 
     #ar-container {
@@ -43,10 +45,10 @@
     }
     #ar-container canvas {
       z-index: 2 !important;
-      pointer-events: auto;
+      pointer-events: none; /* 畫布本身不觸發連結，僅限透明點位層可點擊 */
     }
 
-    /* 3D 轉 2D 原生透明連結覆蓋層 (確保手機點擊 100% 觸發原生新分頁，不被彈窗阻擋器攔截) */
+    /* 3D 轉 2D 僅限座標點位的原生透明連結層 */
     #ar-link-layer {
       position: fixed;
       top: 0; left: 0;
@@ -59,11 +61,12 @@
     .ar-dom-link {
       position: fixed;
       display: none;
-      background: rgba(255, 255, 255, 0);
+      background: rgba(255, 255, 255, 0); /* 100% 透明無標記 */
       pointer-events: auto;
       cursor: pointer;
       text-decoration: none;
       -webkit-tap-highlight-color: transparent;
+       -webkit-touch-callout: none; /* 防止手機長按彈出系統選單，確保長按滑順觸發 */
       user-select: none;
       -webkit-user-select: none;
     }
@@ -82,6 +85,7 @@
       font-size: 14px; font-weight: bold; color: white;
       background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(4px);
       display: none; pointer-events: none; white-space: nowrap;
+      transition: background 0.2s;
     }
 
     /* 啟動遮罩 */
@@ -124,7 +128,7 @@
   </div>
 
   <div id="ar-container"></div>
-  <!-- 原生透明 <a> 連結同步層 -->
+  <!-- 僅放置座標點位的原生透明 <a> 連結層 -->
   <div id="ar-link-layer"></div>
   <div id="video-preload-pool"></div>
 
@@ -138,12 +142,10 @@
     const projectBadge = document.getElementById('project-badge');
     const projectTitleEl = document.getElementById('project-title');
 
-    // 解析網址參數 ?id=專案代號 (若無參數則預設讀取根目錄，100% 向下相容舊版 QR Code)
     const urlParams = new URLSearchParams(window.location.search);
     const currentProjectId = (urlParams.get('id') || '').trim();
     projectBadge.innerText = currentProjectId ? `產品專案：${currentProjectId}` : `預設專案 (Root)`;
 
-    // 智慧路徑解析：自動將相對路徑對應至專屬專案資料夾 ./projects/{id}/
     function resolveProjectAssetUrl(rawPath) {
       if (!rawPath) return '';
       if (/^https?:\/\//i.test(rawPath)) return rawPath;
@@ -158,6 +160,7 @@
     let config = null;
     const validVideoItems = [];
     let validImageLayer = null;
+    let isTargetLocked = false;
 
     function normalizeUrl(rawUrl) {
       if (!rawUrl || typeof rawUrl !== 'string') return '';
@@ -212,31 +215,99 @@
       ctx.fillStyle = "#ffffff";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(text || "👉 點擊任意影片前往官方網站！", 512, 128);
+      ctx.fillText(text || "👉 點擊標記點位前往連結！", 512, 128);
 
       const tex = new THREE.CanvasTexture(cvs);
       tex.needsUpdate = true;
       return tex;
     }
 
-    // 建立綁定於 3D 物件的原生透明 <a target="_blank"> 標籤
+    // =========================================================
+    // 核心功能：建立具備「短按 / 長按持久度分流」的原生透明 <a target="_blank"> 點位
+    // =========================================================
     const trackedDomLinks = [];
-    function registerDomLinkForMesh(mesh, targetUrl, zIndexVal, padPx = 6) {
-      if (!targetUrl) return;
+
+    function registerHotspotDomLink(mesh, spotConfig, zIndexVal) {
+      const shortUrl = normalizeUrl(spotConfig.url);
+      const longUrl = normalizeUrl(spotConfig.longUrl);
+      // 若短按與長按都沒填網址，則不建立連結
+      if (!shortUrl && !longUrl) return;
+
+      const holdMs = Math.max(100, Number(spotConfig.holdDuration ?? 0.8) * 1000);
+
       const a = document.createElement('a');
       a.className = 'ar-dom-link';
-      a.href = targetUrl;
+      a.href = shortUrl || longUrl;
       a.target = '_blank';
       a.rel = 'noopener noreferrer';
       a.style.zIndex = String(zIndexVal);
 
-      a.addEventListener('click', () => {
-        hud.style.background = "rgba(0, 122, 255, 0.95)";
-        hud.innerHTML = "🔗 已於新分頁開啟連結";
+      // 阻止手機長按時彈出預設預覽選單，確保放開手指時順利觸發 click 開新分頁
+      a.addEventListener('contextmenu', (e) => e.preventDefault());
+      a.addEventListener('dragstart', (e) => e.preventDefault());
+
+      let pressStartTime = 0;
+      let holdTimer = null;
+      let isLongPressTriggered = false;
+
+      function onPressStart() {
+        pressStartTime = performance.now();
+        isLongPressTriggered = false;
+        // 按下初期預設指向短按連結 (若無短按連結則指向長按連結)
+        a.href = shortUrl || longUrl;
+
+        if (holdTimer) clearTimeout(holdTimer);
+
+        // 若有設定長按連結，啟動持久度計時器
+        if (longUrl) {
+          holdTimer = setTimeout(() => {
+            isLongPressTriggered = true;
+            a.href = longUrl; // 按壓時間達標！立即將原生 <a> 的目標切換為長按連結
+            hud.style.background = "rgba(147, 51, 234, 0.95)";
+            hud.innerHTML = `🟣 長按已達標 (${(holdMs / 1000).toFixed(1)}s)！放開開啟長按連結`;
+          }, holdMs);
+        }
+      }
+
+      function clearHoldTimer() {
+        if (holdTimer) {
+          clearTimeout(holdTimer);
+          holdTimer = null;
+        }
+      }
+
+      a.addEventListener('pointerdown', onPressStart, { passive: true });
+      a.addEventListener('touchstart', onPressStart, { passive: true });
+      a.addEventListener('pointercancel', clearHoldTimer);
+      a.addEventListener('pointerleave', clearHoldTimer);
+
+      a.addEventListener('click', (e) => {
+        clearHoldTimer();
+        const elapsed = pressStartTime > 0 ? (performance.now() - pressStartTime) : 0;
+        const useLong = (isLongPressTriggered || (longUrl && elapsed >= holdMs));
+
+        if (useLong && longUrl) {
+          a.href = longUrl;
+          hud.style.background = "rgba(147, 51, 234, 0.95)";
+          hud.innerHTML = "🟣 已於新分頁開啟【長按連結】";
+        } else if (shortUrl) {
+          a.href = shortUrl;
+          hud.style.background = "rgba(0, 122, 255, 0.95)";
+          hud.innerHTML = "🔗 已於新分頁開啟【短按連結】";
+        } else {
+          // 若僅設定長按連結但使用者只短按（未達持久度），則取消跳轉並提示需長按
+          e.preventDefault();
+          hud.style.background = "rgba(245, 158, 11, 0.95)";
+          hud.innerHTML = `⏳ 請長按 ${(holdMs / 1000).toFixed(1)} 秒以開啟此點位連結`;
+          return;
+        }
+
+        pressStartTime = 0;
+        isLongPressTriggered = false;
       });
 
       arLinkLayer.appendChild(a);
-      trackedDomLinks.push({ mesh, anchorEl: a, padPx });
+      trackedDomLinks.push({ mesh, anchorEl: a });
     }
 
     async function init() {
@@ -308,7 +379,8 @@
           }
         }
 
-        const imgInfo = validImageLayer ? ` + 1 張互動圖片` : "";
+        const hsCount = (validImageLayer && Array.isArray(validImageLayer.hotspots)) ? validImageLayer.hotspots.length : 0;
+        const imgInfo = validImageLayer ? ` + 1 張互動圖片(${hsCount}個點位)` : "";
         statusMsg.innerText = `✅ 準備就緒（已載入 ${validVideoItems.length} 支影片${imgInfo}）\n請將鏡頭對準實體圖卡`;
         startBtn.innerText = "點擊啟動 AR 鏡頭";
         startBtn.disabled = false;
@@ -349,10 +421,9 @@
         renderer.setClearColor(0x000000, 0);
 
         const anchor = mindarThree.addAnchor(0);
-        const defaultRedirectUrl = normalizeUrl(config.redirectUrl) || "https://example.com";
 
         // =========================================================
-        // A. 浮空文字看板 (綁定原生 <a target="_blank"> 透明連結，z-index: 60)
+        // A. 浮空文字看板 (純視覺展示，點擊不啟動連結)
         // =========================================================
         if (config.bannerEnabled !== false && config.bannerText && config.bannerText.trim() !== "") {
           const bannerTexture = createCleanBannerTexture(config.bannerText);
@@ -369,17 +440,11 @@
           const baseBannerY = (config.bannerPosY !== undefined) ? Number(config.bannerPosY) : 0.65;
           bannerMesh.position.set(0, baseBannerY, 0.12);
           bannerMesh.renderOrder = 20;
-          bannerMesh.userData = {
-            targetUrl: defaultRedirectUrl,
-            halfW: bannerW / 2,
-            halfH: bannerH / 2
-          };
           anchor.group.add(bannerMesh);
-          registerDomLinkForMesh(bannerMesh, defaultRedirectUrl, 60, 8);
         }
 
         // =========================================================
-        // B. 零殘影去背影片平面 (綁定原生 <a target="_blank"> 透明連結，z-index: 55)
+        // B. 零殘影去背影片平面 (純視覺展示，點擊不啟動連結)
         // =========================================================
         const vShader = `
           varying vec2 vUv;
@@ -444,15 +509,7 @@
           mesh.rotation.set(0, baseRY, baseRZ);
           mesh.renderOrder = 10 + idx;
 
-          const videoUrl = normalizeUrl(vConfig.linkUrl) || defaultRedirectUrl;
-          mesh.userData = {
-            targetUrl: videoUrl,
-            halfW: planeH / 2,
-            halfH: planeH / 2
-          };
-
           anchor.group.add(mesh);
-          registerDomLinkForMesh(mesh, videoUrl, 55, 6);
 
           activeVideoObjects.push({
             video: v,
@@ -464,7 +521,7 @@
         });
 
         // =========================================================
-        // C. AR 互動圖片與「100% 全透明」點位感應區 (點位 z-index: 65 最優先)
+        // C. AR 互動圖片與「唯一可觸發連結的座標點位感應區」
         // =========================================================
         if (validImageLayer) {
           const imgGroup = new THREE.Group();
@@ -497,19 +554,18 @@
             });
             const imgMesh = new THREE.Mesh(new THREE.PlaneGeometry(planeW, planeH), imgMat);
             imgMesh.renderOrder = 15;
-            imgMesh.userData = {
-              targetUrl: defaultRedirectUrl,
-              halfW: planeW / 2,
-              halfH: planeH / 2
-            };
             imgGroup.add(imgMesh);
-            registerDomLinkForMesh(imgMesh, defaultRedirectUrl, 50, 0);
+            // 注意：圖片本體不註冊任何連結，確保點空白處不會啟動連結！
 
+            // 僅針對設定的座標點位 (hotspots) 依據後台設定的大小 (radius) 建立透明感應區
             const hotspots = Array.isArray(validImageLayer.hotspots) ? validImageLayer.hotspots : [];
-            hotspots.forEach((spot) => {
-              const spotTargetUrl = normalizeUrl(spot.url) || defaultRedirectUrl;
+            const minDim = Math.min(planeW, planeH);
+
+            hotspots.forEach((spot, sIdx) => {
               const uvX = Number(spot.uvX ?? 0.5);
               const uvY = Number(spot.uvY ?? 0.5);
+              // 讀取後台設定的點位大小比例 (預設 0.15 即 15%)
+              const radiusRatio = Number(spot.radius ?? 0.15);
 
               const localX = (uvX - 0.5) * planeW;
               const localY = (0.5 - uvY) * planeH;
@@ -517,23 +573,21 @@
               const hsMat = new THREE.MeshBasicMaterial({
                 color: 0xffffff,
                 transparent: true,
-                opacity: 0.0,
+                opacity: 0.0, // 觀看端 100% 透明無標記
                 side: THREE.DoubleSide,
                 depthWrite: false
               });
 
-              const hitSize = Math.max(0.16, 0.18 * imgScale);
+              const hitSize = Math.max(0.04, minDim * radiusRatio);
               const hsMesh = new THREE.Mesh(new THREE.PlaneGeometry(hitSize, hitSize), hsMat);
               hsMesh.position.set(localX, localY, 0.01);
               hsMesh.userData = {
-                targetUrl: spotTargetUrl,
-                isHotspot: true,
                 halfW: hitSize / 2,
                 halfH: hitSize / 2
               };
 
               imgGroup.add(hsMesh);
-              registerDomLinkForMesh(hsMesh, spotTargetUrl, 65, 12);
+              registerHotspotDomLink(hsMesh, spot, 65 + sIdx);
             });
           });
         }
@@ -541,7 +595,6 @@
         // =========================================================
         // D. 追蹤狀態事件
         // =========================================================
-        let isTargetLocked = false;
         let lastLockedTime = 0;
 
         anchor.onTargetFound = () => {
@@ -594,7 +647,7 @@
         window.addEventListener('pageshow', resumeARSessionOnReturn);
 
         // =========================================================
-        // F. 渲染迴圈：更新影片 + 實時將 3D 物件投影至 2D 原生 <a target="_blank">
+        // F. 渲染迴圈：更新影片 + 實時將 3D 點位範圍投影至 2D 原生 <a target="_blank">
         // =========================================================
         const cornerVec = new THREE.Vector3();
 
@@ -623,7 +676,6 @@
               if (!vo.aspectCalibrated && v.videoWidth > 0 && v.videoHeight > 0) {
                 const aspect = v.videoWidth / v.videoHeight;
                 vo.mesh.scale.set(aspect, 1, 1);
-                vo.mesh.userData.halfW = (vo.planeH * aspect) / 2;
                 vo.aspectCalibrated = true;
               }
             }
@@ -649,11 +701,10 @@
             const item = trackedDomLinks[i];
             const mesh = item.mesh;
             const el = item.anchorEl;
-            const pad = item.padPx;
 
             const geomParams = mesh.geometry.parameters;
-            const localHW = (geomParams && geomParams.width) ? geomParams.width / 2 : (mesh.userData.halfW || 0.25);
-            const localHH = (geomParams && geomParams.height) ? geomParams.height / 2 : (mesh.userData.halfH || 0.25);
+            const localHW = (geomParams && geomParams.width) ? geomParams.width / 2 : (mesh.userData.halfW || 0.1);
+            const localHH = (geomParams && geomParams.height) ? geomParams.height / 2 : (mesh.userData.halfH || 0.1);
 
             let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
             const localCorners = [
@@ -677,11 +728,11 @@
               if (sy > maxY) maxY = sy;
             }
 
-            const boxW = Math.max(28, (maxX - minX) + pad * 2);
-            const boxH = Math.max(28, (maxY - minY) + pad * 2);
+            const boxW = Math.max(10, maxX - minX);
+            const boxH = Math.max(10, maxY - minY);
 
-            el.style.left = `${minX - pad}px`;
-            el.style.top = `${minY - pad}px`;
+            el.style.left = `${minX}px`;
+            el.style.top = `${minY}px`;
             el.style.width = `${boxW}px`;
             el.style.height = `${boxH}px`;
             el.style.display = 'block';
