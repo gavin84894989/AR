@@ -1,8 +1,10 @@
 {
+  "projectId": "root",
+  "projectName": "雲在兩千米回饋",
   "bannerEnabled": true,
-  "redirectUrl": "https://youtu.be/BlrHaedOOUU",
-  "bannerText": "👉 點擊任意影片前往官方網站！",
-  "bannerPosY": 0.75,
+  "redirectUrl": "https://google.com",
+  "bannerText": "👉 點擊任意影片前往異世界！",
+  "bannerPosY": 0.65,
   "videos": [
     {
       "id": "v_1792338463690_247",
