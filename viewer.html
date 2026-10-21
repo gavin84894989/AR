@@ -76,9 +76,10 @@
       pointer-events: auto;
       cursor: pointer;
       text-decoration: none;
-      touch-action: none; /* 防止長按過程被瀏覽器判定為捲動手勢而中斷 */
+      touch-action: none;
+      -webkit-user-drag: none;
       -webkit-tap-highlight-color: transparent;
-      -webkit-touch-callout: none; /* 防止手機長按彈出系統選單 */
+      -webkit-touch-callout: none;
       user-select: none;
       -webkit-user-select: none;
     }
@@ -247,6 +248,7 @@
     let MeshoptDecoder = null;
     let MindARThree = null;
     let config = null;
+    let activeMindARInstance = null;
 
     const validVideoItems = [];
     const validModelConfigs = [];
@@ -260,21 +262,6 @@
       if (!trimmed) return '';
       if (/^https?:\/\//i.test(trimmed)) return trimmed;
       return 'https://' + trimmed;
-    }
-
-    // 在具備使用者手勢授權的事件 (touchend / pointerup / click) 中強制開啟新分頁
-    function openUrlInNewTab(targetUrl) {
-      if (!targetUrl) return;
-      const tempAnchor = document.createElement('a');
-      tempAnchor.href = targetUrl;
-      tempAnchor.target = '_blank';
-      tempAnchor.rel = 'noopener noreferrer';
-      tempAnchor.style.display = 'none';
-      document.body.appendChild(tempAnchor);
-      tempAnchor.click();
-      setTimeout(() => {
-        if (tempAnchor.parentNode) tempAnchor.parentNode.removeChild(tempAnchor);
-      }, 300);
     }
 
     // 檢查是否於 LINE / FB 內建瀏覽器開啟
@@ -333,19 +320,51 @@
     }
 
     // =========================================================
-    // 2. 建立具備「短按 / 長按持久度分流 + 長按放開強制觸發」的點位連結
+    // 2. 建立具備「短按 / 長按持久度分流 + 放開 100% 雙層跳轉」的點位連結
     // =========================================================
     const trackedDomLinks = [];
+    let lastGlobalNavigateTime = 0;
+
+    function launchTargetUrl(targetUrl, isLongPress) {
+      if (!targetUrl) return;
+      const now = performance.now();
+      if (now - lastGlobalNavigateTime < 800) return;
+      lastGlobalNavigateTime = now;
+
+      // 記錄自動續掃標記，若使用者從歷史紀錄返回本頁可自動重啟相機
+      try {
+        sessionStorage.setItem('ar_auto_resume', '1');
+      } catch (e) {}
+
+      if (isLongPress) {
+        hud.style.background = "rgba(147, 51, 234, 0.95)";
+        hud.innerHTML = "🟣 正在開啟【長按連結】...";
+      } else {
+        hud.style.background = "rgba(0, 122, 255, 0.95)";
+        hud.innerHTML = "🔗 正在開啟【短按連結】...";
+      }
+
+      // 第一層：優先嘗試於 touchend / mouseup 手勢中開啟新分頁 (_blank)
+      let newWin = null;
+      try {
+        newWin = window.open(targetUrl, '_blank');
+      } catch (err) {}
+
+      // 第二層保底：若手機瀏覽器因長按超過 0.5 秒攔截了 _blank 彈窗 (newWin 為 null)，
+      // 立即改用 location.href 強制開啟目標網頁，絕不發生放開沒反應的狀況！
+      if (!newWin || newWin.closed || typeof newWin.closed === 'undefined') {
+        window.location.href = targetUrl;
+      }
+    }
 
     function registerHotspotDomLink(mesh, spotConfig, zIndexVal) {
       const shortUrl = normalizeUrl(spotConfig.url);
-      // 若後台未填長按專屬網址，自動保底使用短按網址或全域預設網址，確保長按達標放開 100% 有反應
       const fallbackDefaultUrl = normalizeUrl(config && config.redirectUrl);
       const longUrl = normalizeUrl(spotConfig.longUrl) || shortUrl || fallbackDefaultUrl;
 
       if (!shortUrl && !longUrl) return;
 
-      const holdMs = Math.max(100, Number(spotConfig.holdDuration ?? 0.8) * 1000);
+      const holdMs = Math.max(150, Number(spotConfig.holdDuration ?? 0.8) * 1000);
 
       const a = document.createElement('a');
       a.className = 'ar-dom-link';
@@ -354,20 +373,19 @@
       a.rel = 'noopener noreferrer';
       a.style.zIndex = String(zIndexVal);
 
-      // 防止手機長按時跳出系統預設預覽選單
+      // 阻止手機長按跳出系統預設選單或拖曳連結
       a.addEventListener('contextmenu', (e) => e.preventDefault());
       a.addEventListener('dragstart', (e) => e.preventDefault());
 
       const linkState = {
         mesh: mesh,
         anchorEl: a,
-        isPressed: false // 按下期間鎖定螢幕座標，防止手震導致按鈕滑離手指
+        isPressed: false
       };
 
       let pressStartTime = 0;
       let holdTimer = null;
       let isLongPressTriggered = false;
-      let lastLaunchTime = 0;
 
       function clearHoldTimer() {
         if (holdTimer) {
@@ -376,8 +394,8 @@
         }
       }
 
-      function onPressStart() {
-        if (performance.now() - lastLaunchTime < 500) return;
+      function onPressStart(e) {
+        if (performance.now() - lastGlobalNavigateTime < 800) return;
         linkState.isPressed = true;
         pressStartTime = performance.now();
         isLongPressTriggered = false;
@@ -395,58 +413,64 @@
         }
       }
 
-      // 【關鍵修復】：處理手指放開事件 (解決手機按住超過 0.5 秒後系統自動取消 click 事件的問題)
+      // 防止長按期間手指微幅晃動被手機誤判為捲動頁面而中斷觸控
+      function onTouchMove(e) {
+        if (linkState.isPressed && e.cancelable) {
+          e.preventDefault();
+        }
+      }
+
+      // 放開手指處理函式 (綁定於元素與全域 window，確保放開 100% 觸發)
       function onPressRelease(e) {
+        if (!linkState.isPressed && !isLongPressTriggered) return;
         clearHoldTimer();
-        if (!linkState.isPressed && pressStartTime === 0) return;
-        linkState.isPressed = false;
 
         const now = performance.now();
         const elapsed = pressStartTime > 0 ? (now - pressStartTime) : 0;
         const reachedLong = isLongPressTriggered || (longUrl && elapsed >= holdMs);
 
+        linkState.isPressed = false;
+        pressStartTime = 0;
+        isLongPressTriggered = false;
+
         if (reachedLong && longUrl) {
-          // 阻止後續可能殘留的重複 click
           if (e && e.cancelable) e.preventDefault();
-          pressStartTime = 0;
-          isLongPressTriggered = false;
-
-          if (now - lastLaunchTime < 600) return;
-          lastLaunchTime = now;
-
-          hud.style.background = "rgba(147, 51, 234, 0.95)";
-          hud.innerHTML = "🟣 已於新分頁開啟【長按連結】";
-
-          // 直接於 touchend / pointerup 手勢授權當下開啟長按新分頁
-          openUrlInNewTab(longUrl);
+          launchTargetUrl(longUrl, true);
         }
       }
 
-      function onPressCancel() {
+      function onTouchCancel(e) {
         clearHoldTimer();
+        // 【關鍵保護】：若畫面已經顯示「🟣 長按已達標」，此時系統若發出 touchcancel 視為放開手指，直接開啟長按網頁！
+        if (isLongPressTriggered && longUrl) {
+          linkState.isPressed = false;
+          pressStartTime = 0;
+          isLongPressTriggered = false;
+          launchTargetUrl(longUrl, true);
+          return;
+        }
         linkState.isPressed = false;
         pressStartTime = 0;
         isLongPressTriggered = false;
       }
 
+      // 採用純粹的 touch 與 mouse 事件，徹底避免 pointerup 搶先吃掉 touchend 權限
       a.addEventListener('touchstart', onPressStart, { passive: true });
-      a.addEventListener('pointerdown', onPressStart, { passive: true });
-
-      // 綁定放開手指事件：確保長按達標放開時立即跳轉
+      a.addEventListener('touchmove', onTouchMove, { passive: false });
       a.addEventListener('touchend', onPressRelease, { passive: false });
-      a.addEventListener('pointerup', onPressRelease);
+      a.addEventListener('touchcancel', onTouchCancel);
 
-      a.addEventListener('touchcancel', onPressCancel);
-      a.addEventListener('pointercancel', onPressCancel);
+      a.addEventListener('mousedown', onPressStart);
+      window.addEventListener('touchend', onPressRelease, { passive: false });
+      window.addEventListener('mouseup', onPressRelease);
 
-      // 一般短按 (< holdDuration) 時，由瀏覽器原生 click 觸發短按網址
+      // 短按 (< holdDuration) 時，由瀏覽器原生 <a target="_blank"> click 開啟新分頁
       a.addEventListener('click', (e) => {
         clearHoldTimer();
-        linkState.isPressed = false;
         const now = performance.now();
 
-        // 若剛剛已經由 touchend / pointerup 開啟過長按連結，攔截重複觸發
-        if (now - lastLaunchTime < 600) {
+        // 若長按已於 touchend 處理完畢，攔截重複 click
+        if (now - lastGlobalNavigateTime < 800) {
           e.preventDefault();
           return;
         }
@@ -454,25 +478,24 @@
         const elapsed = pressStartTime > 0 ? (now - pressStartTime) : 0;
         const useLong = isLongPressTriggered || (longUrl && elapsed >= holdMs);
 
+        linkState.isPressed = false;
+        pressStartTime = 0;
+        isLongPressTriggered = false;
+
         if (useLong && longUrl) {
-          a.href = longUrl;
-          lastLaunchTime = now;
-          hud.style.background = "rgba(147, 51, 234, 0.95)";
-          hud.innerHTML = "🟣 已於新分頁開啟【長按連結】";
+          e.preventDefault();
+          launchTargetUrl(longUrl, true);
         } else if (shortUrl) {
+          lastGlobalNavigateTime = now;
+          try { sessionStorage.setItem('ar_auto_resume', '1'); } catch (err) {}
           a.href = shortUrl;
-          lastLaunchTime = now;
           hud.style.background = "rgba(0, 122, 255, 0.95)";
           hud.innerHTML = "🔗 已於新分頁開啟【短按連結】";
         } else {
           e.preventDefault();
           hud.style.background = "rgba(245, 158, 11, 0.95)";
           hud.innerHTML = `⏳ 請長按 ${(holdMs / 1000).toFixed(1)} 秒以開啟此點位連結`;
-          return;
         }
-
-        pressStartTime = 0;
-        isLongPressTriggered = false;
       });
 
       arLinkLayer.appendChild(a);
@@ -511,7 +534,6 @@
         MeshoptDecoder = meshoptMod.MeshoptDecoder;
         MindARThree = mindarModule.MindARThree;
 
-        // 確保 Meshopt WebAssembly 解碼器完全就緒
         if (MeshoptDecoder && MeshoptDecoder.ready) {
           try { await MeshoptDecoder.ready; } catch (e) {}
         }
@@ -587,6 +609,13 @@
         startBtn.disabled = false;
         startBtn.onclick = startAR;
 
+        // 若為點擊長按連結後按「返回」回到本頁，自動無縫啟動相機續掃
+        try {
+          if (sessionStorage.getItem('ar_auto_resume') === '1') {
+            startAR();
+          }
+        } catch (e) {}
+
       } catch (err) {
         console.error(err);
         statusMsg.className = 'text-error';
@@ -620,6 +649,7 @@
           missTolerance: 5,
           warmupTolerance: 2
         });
+        activeMindARInstance = mindarThree;
 
         const { renderer, scene, camera } = mindarThree;
         renderer.setClearColor(0x000000, 0);
@@ -970,18 +1000,33 @@
         hud.style.display = 'block';
 
         // =========================================================
-        // 4.F 螢幕旋轉與「從新分頁返回時」自動喚醒相機機制
+        // 4.F 螢幕旋轉與「從新分頁或返回鍵回到本頁時」自動喚醒/重啟相機機制
         // =========================================================
         window.addEventListener('orientationchange', () => {
           setTimeout(() => window.dispatchEvent(new Event('resize')), 150);
           setTimeout(() => window.dispatchEvent(new Event('resize')), 350);
         });
 
-        function resumeARSessionOnReturn() {
+        async function resumeARSessionOnReturn(e) {
           const camVideo = container.querySelector('video');
-          if (camVideo && camVideo.paused) {
+          // 檢查相機串流是否因頁面導向而被系統關閉 (ended)
+          const streamDead = !camVideo || !camVideo.srcObject ||
+            camVideo.srcObject.getVideoTracks().some(t => t.readyState === 'ended');
+
+          if ((e && e.persisted) || streamDead) {
+            try {
+              if (activeMindARInstance) {
+                activeMindARInstance.stop();
+                await activeMindARInstance.start();
+              }
+            } catch (err) {
+              window.location.reload();
+              return;
+            }
+          } else if (camVideo && camVideo.paused) {
             camVideo.play().catch(() => {});
           }
+
           validVideoItems.forEach(item => {
             if (item.element.paused) item.element.play().catch(() => {});
           });
@@ -994,8 +1039,8 @@
             resumeARSessionOnReturn();
           }
         });
-        window.addEventListener('focus', resumeARSessionOnReturn);
-        window.addEventListener('pageshow', resumeARSessionOnReturn);
+        window.addEventListener('focus', () => resumeARSessionOnReturn());
+        window.addEventListener('pageshow', (e) => resumeARSessionOnReturn(e));
 
         // =========================================================
         // 4.G 渲染迴圈：更新影片 + 更新 3D 模型動畫 + 投影點位連結
@@ -1063,7 +1108,7 @@
 
           for (let i = 0; i < trackedDomLinks.length; i++) {
             const item = trackedDomLinks[i];
-            // 【關鍵防手震】：若手指正按住此點位進行長按倒數，鎖定按鈕座標不隨鏡頭晃動偏移
+            // 按壓倒數期間鎖定按鈕座標，避免手震偏離
             if (item.isPressed) continue;
 
             const mesh = item.mesh;
