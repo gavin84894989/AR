@@ -3,7 +3,6 @@
 <head>
   <meta charset="UTF-8">
   <title>AR 多產品發布管理後台</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script type="importmap">
   {
@@ -23,7 +22,7 @@
       background: rgba(15, 23, 42, 0.85); border: 1px solid #007aff;
       color: #fff; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: bold;
     }
-    #sidebar { width: 460px; background: #ffffff; color: #1e293b; padding: 18px; overflow-y: auto; border-left: 1px solid #cbd5e1; }
+    #sidebar { width: 465px; background: #ffffff; color: #1e293b; padding: 18px; overflow-y: auto; border-left: 1px solid #cbd5e1; }
     h2 { margin: 0 0 14px 0; font-size: 18px; color: #0f172a; border-bottom: 2px solid #007aff; padding-bottom: 8px; }
     .card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-bottom: 14px; position: relative; }
     .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
@@ -36,7 +35,7 @@
     input[type="range"] { width: 100%; margin: 2px 0; }
     .row { display: flex; gap: 8px; align-items: center; }
     .col { flex: 1; }
-    .hint { font-size: 11px; color: #64748b; margin-top: 3px; }
+    .hint { font-size: 11px; color: #64748b; margin-top: 3px; line-height: 1.4; }
 
     .btn-primary-sm {
       background: #007aff; color: #fff; border: none; border-radius: 5px;
@@ -164,7 +163,7 @@
         <input type="checkbox" id="img-layer-enabled"> 啟用 AR 互動圖片圖層
       </label>
 
-      <!-- 【全新功能：後台對位輔助工具區】 -->
+      <!-- 後台 3D 對位輔助工具區 -->
       <div style="background:#e0f2fe; border:1px dashed #7dd3fc; border-radius:6px; padding:10px; margin-top:8px;">
         <label style="color:#0284c7; font-weight:bold; margin-top:0;">🔍 後台 3D 對位輔助 (僅影響左側預覽畫面)</label>
         <div class="row">
@@ -179,7 +178,7 @@
           </div>
         </div>
       </div>
-      
+
       <label style="display:flex; align-items:center; gap:6px; cursor:pointer; margin-top:10px; color:#e11d48; font-weight:bold;">
         <input type="checkbox" id="img-hide-body"> 🫥 發布時隱藏本體 (手機端 100% 透明，作為 3D 模型隱形感應板)
       </label>
@@ -238,14 +237,20 @@
     import * as THREE from 'three';
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
     import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+    import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
     import { Compiler } from 'mindar-image';
 
     if (THREE.ColorManagement) { THREE.ColorManagement.enabled = false; }
 
+    // 完整配置 GLTFLoader：同時支援 Draco 與 glTF-Transform 的 Meshopt 壓縮格式
     const gltfLoader = new GLTFLoader();
+    gltfLoader.setCrossOrigin('anonymous');
     const dracoLoader = new DRACOLoader();
     dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
     gltfLoader.setDRACOLoader(dracoLoader);
+    if (MeshoptDecoder) {
+      gltfLoader.setMeshoptDecoder(MeshoptDecoder);
+    }
 
     function normalizeUrl(rawUrl) {
       if (!rawUrl || typeof rawUrl !== 'string') return '';
@@ -311,17 +316,19 @@
 
     const previewArea = document.getElementById('preview-area');
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(45, previewArea.clientWidth / previewArea.clientHeight, 0.1, 100);
+    const camera = new THREE.PerspectiveCamera(45, previewArea.clientWidth / previewArea.clientHeight, 0.01, 100);
     camera.position.set(0, 0, 2.6);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(previewArea.clientWidth, previewArea.clientHeight);
     previewArea.appendChild(renderer.domElement);
 
-    scene.add(new THREE.AmbientLight(0xffffff, 1.8));
-    const keyLight = new THREE.DirectionalLight(0xffffff, 2.2);
+    // 強化立體光影系統 (加入半球光與多向補光，防止 PBR 金屬材質變黑)
+    scene.add(new THREE.AmbientLight(0xffffff, 2.2));
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x666666, 2.0));
+    const keyLight = new THREE.DirectionalLight(0xffffff, 2.5);
     keyLight.position.set(2, 4, 5); scene.add(keyLight);
-    const fillLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    const fillLight = new THREE.DirectionalLight(0xffffff, 1.5);
     fillLight.position.set(-2, -2, 3); scene.add(fillLight);
 
     const refBox = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0x3f3f46, wireframe: true }));
@@ -467,7 +474,7 @@
     document.getElementById('add-video-btn').addEventListener('click', () => { videoLayers.push(createVideoLayerObject({ px: 0, py: 0 })); renderVideoCardsUI(); });
 
     // =========================================================
-    // 3D 模型系統
+    // 3D 模型系統 (支援 Meshopt / Quantization 壓縮檔解碼與材質防黑修復)
     // =========================================================
     const modelControlsContainer = document.getElementById('model-controls');
     let modelLayers = [];
@@ -477,23 +484,94 @@
       modelLayers = []; modelControlsContainer.innerHTML = '';
     }
 
-    function loadGltfIntoLayer(layerObj, srcUrl) {
-      while (layerObj.scaleHolder.children.length > 0) layerObj.scaleHolder.remove(layerObj.scaleHolder.children[0]);
+    async function loadGltfIntoLayer(layerObj, srcUrl, statusHintEl = null) {
+      while (layerObj.scaleHolder.children.length > 0) {
+        layerObj.scaleHolder.remove(layerObj.scaleHolder.children[0]);
+      }
       layerObj.mixer = null;
-      gltfLoader.load(srcUrl, (gltf) => {
-        const rawModel = gltf.scene;
-        const box = new THREE.Box3().setFromObject(rawModel);
-        const size = new THREE.Vector3(); const center = new THREE.Vector3();
-        box.getSize(size); box.getCenter(center);
-        const normFactor = 0.6 / Math.max(size.x, size.y, size.z, 0.001);
-        rawModel.position.set(-center.x * normFactor, -center.y * normFactor, -center.z * normFactor);
-        rawModel.scale.setScalar(normFactor);
-        layerObj.scaleHolder.add(rawModel); layerObj.scaleHolder.scale.setScalar(layerObj.scale); layerObj.wrapperGroup.visible = true;
-        if (gltf.animations && gltf.animations.length > 0) {
-          layerObj.mixer = new THREE.AnimationMixer(rawModel);
-          gltf.animations.forEach(clip => layerObj.mixer.clipAction(clip).play());
+
+      if (statusHintEl) {
+        statusHintEl.style.color = '#0284c7';
+        statusHintEl.innerText = '⏳ 正在解碼並載入壓縮 3D 模型...';
+      }
+
+      if (MeshoptDecoder && MeshoptDecoder.ready) {
+        try { await MeshoptDecoder.ready; } catch (e) {}
+      }
+
+      gltfLoader.load(
+        srcUrl,
+        (gltf) => {
+          const rawModel = gltf.scene || (gltf.scenes && gltf.scenes[0]);
+          if (!rawModel) return;
+
+          // 【核心修復 1】：處理 KHR_mesh_quantization 量化網格與 PBR 金屬材質全黑問題
+          rawModel.traverse((child) => {
+            if (child.isMesh) {
+              child.frustumCulled = false; // 強制禁止視錐體剔除，確保模型絕不消失
+              if (child.geometry) {
+                child.geometry.computeBoundingBox();
+                child.geometry.computeBoundingSphere();
+              }
+              if (child.material) {
+                const mats = Array.isArray(child.material) ? child.material : [child.material];
+                mats.forEach(m => {
+                  m.side = THREE.DoubleSide;
+                  // 防止無環境貼圖時高金屬度 (metalness=1) 導致模型呈現全黑隱形
+                  if (m.metalness !== undefined && m.metalness > 0.3) {
+                    m.metalness = 0.15;
+                  }
+                  if (m.roughness !== undefined && m.roughness < 0.25) {
+                    m.roughness = 0.55;
+                  }
+                  m.needsUpdate = true;
+                });
+              }
+            }
+          });
+
+          // 【核心修復 2】：更新矩陣後計算真實邊界框，自動置中並標準化尺寸
+          rawModel.updateMatrixWorld(true);
+          const box = new THREE.Box3().setFromObject(rawModel);
+          const size = new THREE.Vector3();
+          const center = new THREE.Vector3();
+          box.getSize(size);
+          box.getCenter(center);
+
+          let maxDim = Math.max(size.x, size.y, size.z);
+          if (!isFinite(maxDim) || maxDim <= 0.0001) maxDim = 1.0;
+          const normFactor = 0.65 / maxDim;
+
+          rawModel.position.set(
+            -center.x * normFactor,
+            -center.y * normFactor,
+            -center.z * normFactor
+          );
+          rawModel.scale.setScalar(normFactor);
+
+          layerObj.scaleHolder.add(rawModel);
+          layerObj.scaleHolder.scale.setScalar(layerObj.scale);
+          layerObj.wrapperGroup.visible = true;
+
+          if (gltf.animations && gltf.animations.length > 0) {
+            layerObj.mixer = new THREE.AnimationMixer(rawModel);
+            gltf.animations.forEach(clip => layerObj.mixer.clipAction(clip).play());
+          }
+
+          if (statusHintEl) {
+            statusHintEl.style.color = '#10b981';
+            statusHintEl.innerText = `✅ 3D 模型已成功顯示於左側預覽區！可開始與圖片貼合對位`;
+          }
+        },
+        undefined,
+        (err) => {
+          console.error("3D 模型載入失敗:", err);
+          if (statusHintEl) {
+            statusHintEl.style.color = '#ef4444';
+            statusHintEl.innerText = `❌ 模型解析失敗：${err.message || '請確認 .glb 檔案格式'}`;
+          }
         }
-      }, undefined, () => {});
+      );
     }
 
     function createModelLayerObject(initialData = {}) {
@@ -522,7 +600,7 @@
       modelControlsContainer.innerHTML = '';
       modelLayers.forEach((layer, idx) => {
         const card = document.createElement('div'); card.className = 'card'; card.style.borderColor = '#c4b5fd'; card.style.background = '#faf5ff';
-        const fileStatusText = layer.file ? `✅ 已選取：${layer.file.name}` : (layer.url ? `📁 沿用專案檔案：${layer.url}` : `⚠️ 請選擇 .glb 檔案`);
+        const fileStatusText = layer.file ? `✅ 已載入：${layer.file.name} (${(layer.file.size / (1024 * 1024)).toFixed(1)} MB)` : (layer.url ? `📁 沿用專案檔案：${layer.url}` : `⚠️ 請選擇 .glb 檔案`);
 
         card.innerHTML = `
           <div class="card-header">
@@ -530,7 +608,7 @@
             <button type="button" class="btn-del-card" data-idx="${idx}">🗑️ 刪除此模型</button>
           </div>
           <input type="file" class="m-file-in" accept=".glb,.gltf,model/gltf-binary">
-          <div class="hint m-file-hint" style="color:${(layer.file || layer.url) ? '#6d28d9' : '#ef4444'};">${fileStatusText}</div>
+          <div class="hint m-file-hint" style="color:${(layer.file || layer.url) ? '#6d28d9' : '#ef4444'}; font-weight:bold;">${fileStatusText}</div>
           <div class="row" style="margin-top:6px;">
             <div class="col"><label>水平 X</label><input type="range" class="m-px-in" min="-1.2" max="1.2" step="0.05" value="${layer.px}"></div>
             <div class="col"><label>垂直 Y</label><input type="range" class="m-py-in" min="-1.2" max="1.2" step="0.05" value="${layer.py}"></div>
@@ -556,8 +634,8 @@
         fileIn.addEventListener('change', (e) => {
           const f = e.target.files[0];
           if (f) {
-            layer.file = f; fileHint.style.color = '#10b981'; fileHint.innerText = `✅ 已選取新 3D 檔案：${f.name}`;
-            loadGltfIntoLayer(layer, URL.createObjectURL(f));
+            layer.file = f;
+            loadGltfIntoLayer(layer, URL.createObjectURL(f), fileHint);
           }
         });
         card.querySelector('.m-px-in').addEventListener('input', (e) => { layer.px = Number(e.target.value); });
@@ -597,7 +675,6 @@
     const hotspotListEl = document.getElementById('hotspot-list');
     const showZoneHelperCheckbox = document.getElementById('show-zone-helper');
 
-    // 對位輔助工具事件
     const previewImgOpacityIn = document.getElementById('preview-img-opacity');
     const previewImgTopIn = document.getElementById('preview-img-top');
 
@@ -952,7 +1029,7 @@
           if (layer.file) {
             const vRepoPath = `${prefix}videos/video_${layer.id}.mp4`; status.innerText = `⏳ [${projLabel}] 正在上傳影片 #${i + 1}...`;
             await uploadToGitHub(repo, branch, token, vRepoPath, await fileToBase64(layer.file), `Upload ${vRepoPath}`);
-            finalVideoUrl = `./${vRepoPath}`; layer.url = finalVideoUrl; layer.file = null;
+            finalVideoUrl = `./videos/video_${layer.id}.mp4`; layer.url = finalVideoUrl; layer.file = null;
           }
           if (finalVideoUrl) videosConfig.push({ id: layer.id, enabled: true, url: finalVideoUrl, keyColor: layer.keyColor, similarity: layer.similarity, smoothness: layer.smoothness, px: layer.px, py: layer.py, scale: layer.scale, ry: layer.ry, rz: layer.rz });
         }
@@ -961,9 +1038,10 @@
         for (let i = 0; i < modelLayers.length; i++) {
           const mLayer = modelLayers[i]; let finalModelUrl = mLayer.url;
           if (mLayer.file) {
-            const mRepoPath = `${prefix}models/model_${mLayer.id}.glb`; status.innerText = `⏳ [${projLabel}] 正在上傳 3D 模型 #${i + 1}...`;
+            const mRepoPath = `${prefix}models/model_${mLayer.id}.glb`;
+            status.innerText = `⏳ [${projLabel}] 正在上傳 3D 模型 #${i + 1} (${(mLayer.file.size / (1024 * 1024)).toFixed(1)} MB)...`;
             await uploadToGitHub(repo, branch, token, mRepoPath, await fileToBase64(mLayer.file), `Upload ${mRepoPath}`);
-            finalModelUrl = `./${mRepoPath}`; mLayer.url = finalModelUrl; mLayer.file = null;
+            finalModelUrl = `./models/model_${mLayer.id}.glb`; mLayer.url = finalModelUrl; mLayer.file = null;
           }
           if (finalModelUrl) modelsConfig.push({ id: mLayer.id, enabled: true, url: finalModelUrl, px: mLayer.px, py: mLayer.py, pz: mLayer.pz, scale: mLayer.scale, rx: mLayer.rx, ry: mLayer.ry, rz: mLayer.rz, autoRotate: mLayer.autoRotate });
         }
@@ -972,7 +1050,7 @@
         if (arImgFile && imgEnabledCheckbox.checked) {
           const imgRepoPath = `${prefix}images/ar_overlay.png`; status.innerText = `⏳ [${projLabel}] 正在上傳 AR 互動圖片...`;
           await uploadToGitHub(repo, branch, token, imgRepoPath, await fileToBase64(arImgFile), `Update ${imgRepoPath}`);
-          finalImgUrl = `./${imgRepoPath}`; existingImageUrl = finalImgUrl;
+          finalImgUrl = `./images/ar_overlay.png`; existingImageUrl = finalImgUrl;
         }
 
         status.innerText = `⏳ [${projLabel}] 正在更新 ${prefix}config.json 設定檔...`;
