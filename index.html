@@ -113,29 +113,29 @@
     <div class="card" style="border: 2px solid #007aff; background: #eff6ff;">
       <div class="card-header">
         <h3>0. 多產品專案管理中心</h3>
-        <button type="button" id="sync-projects-btn" class="btn-primary-sm">🔄 讀取線上專案清單</button>
+        <button type="button" id="sync-projects-btn" class="btn-primary-sm">🔄 讀取線上清單</button>
       </div>
       <label>選擇要編輯的產品專案</label>
       <div class="row">
         <select id="project-select" style="flex:1; font-weight:bold; color:#0f172a;">
           <option value="">[根目錄預設專案 (相容舊版 QR)]</option>
         </select>
-        <button type="button" id="delete-project-btn" class="btn-del-card" style="display:none;">🗑️ 刪除此專案</button>
+        <button type="button" id="delete-project-btn" class="btn-del-card" style="display:none;">🗑️ 刪除專案</button>
       </div>
       <label style="margin-top:10px;">建立或切換至新產品代號</label>
       <div class="row">
-        <input type="text" id="new-project-id" placeholder="例如: product_01 或 card_A" style="flex:1;">
-        <button type="button" id="create-project-btn" class="btn-primary-sm">＋ 新增/切換專案</button>
+        <input type="text" id="new-project-id" placeholder="例如: product_01" style="flex:1;">
+        <button type="button" id="create-project-btn" class="btn-primary-sm">＋ 新增/切換</button>
       </div>
-      <label style="margin-top:8px;">產品專案顯示名稱 (選填，顯示於觀看端標題)</label>
-      <input type="text" id="project-name-input" placeholder="例如: 2026 春季新品 AR 展示">
+      <label style="margin-top:8px;">產品專案顯示名稱 (顯示於觀看端標題)</label>
+      <input type="text" id="project-name-input" placeholder="例如: 2026 春季新品 AR">
     </div>
 
     <!-- 1. 實體掃描圖卡 -->
     <div class="card">
       <div class="card-header"><h3>1. 實體掃描圖卡 (JPG/PNG)</h3></div>
       <input type="file" id="target-file" accept="image/png, image/jpeg">
-      <div id="target-mind-hint" class="hint">若本專案已上傳過 targets.mind 且不換圖，可留空</div>
+      <div id="target-mind-hint" class="hint">若本專案已上傳過 targets.mind 且不換圖可留空</div>
     </div>
 
     <!-- 2. 浮空提示看板 (純展示) -->
@@ -149,24 +149,39 @@
       <label>預設網址範本 (新增點位時自動帶入此網址)</label>
       <input type="text" id="redirect-url" value="https://example.com">
       <label>上方對話框顯示文字</label>
-      <input type="text" id="banner-text" value="👉 點擊指定點位開啟連結！">
+      <input type="text" id="banner-text" value="👉 點擊圖片點位開啟連結！">
       <label>提示看板垂直高度 (Y)</label>
       <input type="range" id="banner-y" min="-1" max="1.5" step="0.05" value="0.65">
     </div>
 
-    <!-- 3. AR 互動圖片與「可調大小 ＋ 長短按雙連結」點位設定 -->
+    <!-- 3. AR 互動圖片與透明感應點位 -->
     <div class="card" style="border-color: #38bdf8; background: #f0f9ff;">
       <div class="card-header">
         <h3>3. AR 互動圖片與點位設定 (唯一可點擊區)</h3>
-        <button type="button" id="clear-img-btn" class="btn-del-card">🗑️ 清空移除圖片</button>
+        <button type="button" id="clear-img-btn" class="btn-del-card">🗑️ 清空移除</button>
       </div>
       <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
         <input type="checkbox" id="img-layer-enabled"> 啟用 AR 互動圖片圖層
       </label>
+
+      <!-- 【全新功能：後台對位輔助工具區】 -->
+      <div style="background:#e0f2fe; border:1px dashed #7dd3fc; border-radius:6px; padding:10px; margin-top:8px;">
+        <label style="color:#0284c7; font-weight:bold; margin-top:0;">🔍 後台 3D 對位輔助 (僅影響左側預覽畫面)</label>
+        <div class="row">
+          <div class="col">
+            <label style="color:#0369a1;">圖片預覽透明度</label>
+            <input type="range" id="preview-img-opacity" min="0" max="1" step="0.05" value="0.5">
+          </div>
+          <div class="col" style="padding-top:14px;">
+            <label style="display:flex; align-items:center; gap:4px; cursor:pointer; color:#0369a1; margin:0;">
+              <input type="checkbox" id="preview-img-top" checked> 強制顯示於最上層
+            </label>
+          </div>
+        </div>
+      </div>
       
-      <!-- 【全新功能：隱藏圖片本體開關】 -->
-      <label style="display:flex; align-items:center; gap:6px; cursor:pointer; margin-top:6px; color:#0284c7;">
-        <input type="checkbox" id="img-hide-body"> 🫥 隱藏圖片本體（打勾後，圖片在實境中將完全隱形，僅保留下方點位作為 3D 模型的透明感應板）
+      <label style="display:flex; align-items:center; gap:6px; cursor:pointer; margin-top:10px; color:#e11d48; font-weight:bold;">
+        <input type="checkbox" id="img-hide-body"> 🫥 發布時隱藏本體 (手機端 100% 透明，作為 3D 模型隱形感應板)
       </label>
 
       <label style="margin-top:8px;">選擇上傳圖片 (PNG/JPG，作為感應點位的參考底圖)</label>
@@ -187,14 +202,14 @@
       </div>
 
       <div id="hotspot-editor-wrap">
-        <label style="color:#0284c7; font-weight:bold;">👇 點擊下方圖片新增點位（虛線框僅供後台確認範圍，手機端完全透明）：</label>
+        <label style="color:#0284c7; font-weight:bold;">👇 點擊下方圖片新增點位（虛線框僅供後台確認範圍）：</label>
         <div id="hotspot-canvas-box">
           <img id="hotspot-preview-img" alt="AR 互動圖片預覽">
           <div id="hotspot-pins-layer"></div>
         </div>
         <div class="row" style="margin-top:6px; justify-content:space-between;">
           <label style="margin:0; display:flex; align-items:center; gap:4px; cursor:pointer; font-size:11px;">
-            <input type="checkbox" id="show-zone-helper" checked> 於後台圖片顯示感應範圍虛線框
+            <input type="checkbox" id="show-zone-helper" checked> 顯示感應範圍虛線框
           </label>
         </div>
         <div id="hotspot-list"></div>
@@ -225,9 +240,7 @@
     import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
     import { Compiler } from 'mindar-image';
 
-    if (THREE.ColorManagement) {
-      THREE.ColorManagement.enabled = false;
-    }
+    if (THREE.ColorManagement) { THREE.ColorManagement.enabled = false; }
 
     const gltfLoader = new GLTFLoader();
     const dracoLoader = new DRACOLoader();
@@ -307,11 +320,9 @@
 
     scene.add(new THREE.AmbientLight(0xffffff, 1.8));
     const keyLight = new THREE.DirectionalLight(0xffffff, 2.2);
-    keyLight.position.set(2, 4, 5);
-    scene.add(keyLight);
+    keyLight.position.set(2, 4, 5); scene.add(keyLight);
     const fillLight = new THREE.DirectionalLight(0xffffff, 1.0);
-    fillLight.position.set(-2, -2, 3);
-    scene.add(fillLight);
+    fillLight.position.set(-2, -2, 3); scene.add(fillLight);
 
     const refBox = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0x3f3f46, wireframe: true }));
     scene.add(refBox);
@@ -396,8 +407,7 @@
             v.src = `${layerObj.url}?t=${Date.now()}`; v.play().catch(() => {});
             v.onloadedmetadata = () => {
               layerObj.aspect = (v.videoWidth || 1) / (v.videoHeight || 1);
-              mesh.scale.set(layerObj.aspect * layerObj.scale, layerObj.scale, 1);
-              mesh.visible = true;
+              mesh.scale.set(layerObj.aspect * layerObj.scale, layerObj.scale, 1); mesh.visible = true;
             };
           }
         }).catch(() => {});
@@ -408,10 +418,8 @@
     function renderVideoCardsUI() {
       videoControlsContainer.innerHTML = '';
       videoLayers.forEach((layer, idx) => {
-        const card = document.createElement('div');
-        card.className = 'card';
+        const card = document.createElement('div'); card.className = 'card';
         const fileStatusText = layer.file ? `✅ 已選取新檔案：${layer.file.name}` : (layer.url ? `📁 目前沿用專案檔案：${layer.url}` : `⚠️ 尚未選取影片檔案`);
-
         card.innerHTML = `
           <div class="card-header">
             <h3>🎬 去背影片圖層 #${idx + 1} (純展示)</h3>
@@ -434,25 +442,16 @@
             <div class="col"><label>傾斜 Z</label><input type="range" class="v-rz-in" min="-180" max="180" step="1" value="${layer.rz}"></div>
           </div>
         `;
-
-        card.querySelector('.btn-del-card').addEventListener('click', () => {
-          layer.videoEl.pause(); layer.videoEl.src = ""; scene.remove(layer.mesh); videoLayers.splice(idx, 1); renderVideoCardsUI();
-        });
-
-        const fileIn = card.querySelector('.v-file-in');
-        const fileHint = card.querySelector('.v-file-hint');
+        card.querySelector('.btn-del-card').addEventListener('click', () => { layer.videoEl.pause(); layer.videoEl.src = ""; scene.remove(layer.mesh); videoLayers.splice(idx, 1); renderVideoCardsUI(); });
+        const fileIn = card.querySelector('.v-file-in'); const fileHint = card.querySelector('.v-file-hint');
         fileIn.addEventListener('change', (e) => {
           const f = e.target.files[0];
           if (f) {
             layer.file = f; fileHint.style.color = '#10b981'; fileHint.innerText = `✅ 已選取新檔案：${f.name}`;
             layer.videoEl.src = URL.createObjectURL(f); layer.videoEl.play().catch(() => {});
-            layer.videoEl.onloadedmetadata = () => {
-              layer.aspect = (layer.videoEl.videoWidth || 1) / (layer.videoEl.videoHeight || 1);
-              layer.mesh.scale.set(layer.aspect * layer.scale, layer.scale, 1); layer.mesh.visible = true;
-            };
+            layer.videoEl.onloadedmetadata = () => { layer.aspect = (layer.videoEl.videoWidth || 1) / (layer.videoEl.videoHeight || 1); layer.mesh.scale.set(layer.aspect * layer.scale, layer.scale, 1); layer.mesh.visible = true; };
           }
         });
-
         card.querySelector('.v-color-in').addEventListener('input', (e) => { layer.keyColor = e.target.value; layer.mat.uniforms.keyColor.value.set(layer.keyColor); });
         card.querySelector('.v-sim-in').addEventListener('input', (e) => { layer.similarity = Number(e.target.value); layer.mat.uniforms.similarity.value = layer.similarity; });
         card.querySelector('.v-smooth-in').addEventListener('input', (e) => { layer.smoothness = Number(e.target.value); layer.mat.uniforms.smoothness.value = layer.smoothness; });
@@ -461,14 +460,11 @@
         card.querySelector('.v-scale-in').addEventListener('input', (e) => { layer.scale = Number(e.target.value); layer.mesh.scale.set(layer.aspect * layer.scale, layer.scale, 1); });
         card.querySelector('.v-ry-in').addEventListener('input', (e) => { layer.ry = Number(e.target.value); });
         card.querySelector('.v-rz-in').addEventListener('input', (e) => { layer.rz = Number(e.target.value); });
-
         videoControlsContainer.appendChild(card);
       });
     }
 
-    document.getElementById('add-video-btn').addEventListener('click', () => {
-      videoLayers.push(createVideoLayerObject({ px: 0, py: 0 })); renderVideoCardsUI();
-    });
+    document.getElementById('add-video-btn').addEventListener('click', () => { videoLayers.push(createVideoLayerObject({ px: 0, py: 0 })); renderVideoCardsUI(); });
 
     // =========================================================
     // 3D 模型系統
@@ -492,9 +488,7 @@
         const normFactor = 0.6 / Math.max(size.x, size.y, size.z, 0.001);
         rawModel.position.set(-center.x * normFactor, -center.y * normFactor, -center.z * normFactor);
         rawModel.scale.setScalar(normFactor);
-        layerObj.scaleHolder.add(rawModel);
-        layerObj.scaleHolder.scale.setScalar(layerObj.scale);
-        layerObj.wrapperGroup.visible = true;
+        layerObj.scaleHolder.add(rawModel); layerObj.scaleHolder.scale.setScalar(layerObj.scale); layerObj.wrapperGroup.visible = true;
         if (gltf.animations && gltf.animations.length > 0) {
           layerObj.mixer = new THREE.AnimationMixer(rawModel);
           gltf.animations.forEach(clip => layerObj.mixer.clipAction(clip).play());
@@ -527,8 +521,7 @@
     function renderModelCardsUI() {
       modelControlsContainer.innerHTML = '';
       modelLayers.forEach((layer, idx) => {
-        const card = document.createElement('div');
-        card.className = 'card'; card.style.borderColor = '#c4b5fd'; card.style.background = '#faf5ff';
+        const card = document.createElement('div'); card.className = 'card'; card.style.borderColor = '#c4b5fd'; card.style.background = '#faf5ff';
         const fileStatusText = layer.file ? `✅ 已選取：${layer.file.name}` : (layer.url ? `📁 沿用專案檔案：${layer.url}` : `⚠️ 請選擇 .glb 檔案`);
 
         card.innerHTML = `
@@ -582,12 +575,10 @@
       });
     }
 
-    document.getElementById('add-model-btn').addEventListener('click', () => {
-      modelLayers.push(createModelLayerObject({ px: 0, py: 0, pz: 0.15 })); renderModelCardsUI();
-    });
+    document.getElementById('add-model-btn').addEventListener('click', () => { modelLayers.push(createModelLayerObject({ px: 0, py: 0, pz: 0.15 })); renderModelCardsUI(); });
 
     // =========================================================
-    // AR 圖片點位系統 (隱形感應板)
+    // AR 圖片點位與對位輔助系統
     // =========================================================
     let hotspotsData = [];
     let currentImageAspect = 1.0;
@@ -598,7 +589,7 @@
 
     const arImageInput = document.getElementById('ar-image-file');
     const imgEnabledCheckbox = document.getElementById('img-layer-enabled');
-    const imgHideBodyCheckbox = document.getElementById('img-hide-body'); // NEW
+    const imgHideBodyCheckbox = document.getElementById('img-hide-body');
     const currentImgHint = document.getElementById('current-img-hint');
     const editorWrap = document.getElementById('hotspot-editor-wrap');
     const previewImgEl = document.getElementById('hotspot-preview-img');
@@ -606,18 +597,25 @@
     const hotspotListEl = document.getElementById('hotspot-list');
     const showZoneHelperCheckbox = document.getElementById('show-zone-helper');
 
-    showZoneHelperCheckbox.addEventListener('change', () => { pinsLayer.style.display = showZoneHelperCheckbox.checked ? 'block' : 'none'; });
+    // 對位輔助工具事件
+    const previewImgOpacityIn = document.getElementById('preview-img-opacity');
+    const previewImgTopIn = document.getElementById('preview-img-top');
 
-    // 即時預覽隱形圖片效果
-    imgHideBodyCheckbox.addEventListener('change', () => {
+    previewImgOpacityIn.addEventListener('input', (e) => {
+      if (previewImgMesh) previewImgMesh.material.opacity = Number(e.target.value);
+    });
+
+    previewImgTopIn.addEventListener('change', (e) => {
       if (previewImgMesh) {
-        previewImgMesh.material.opacity = imgHideBodyCheckbox.checked ? 0.3 : 1.0; // 後台半透明預覽，手機端全透明
+        previewImgMesh.material.depthTest = !e.target.checked;
+        previewImgMesh.renderOrder = e.target.checked ? 999 : 15;
       }
     });
 
+    showZoneHelperCheckbox.addEventListener('change', () => { pinsLayer.style.display = showZoneHelperCheckbox.checked ? 'block' : 'none'; });
+
     function clearImageLayerState() {
-      imgEnabledCheckbox.checked = false;
-      imgHideBodyCheckbox.checked = false;
+      imgEnabledCheckbox.checked = false; imgHideBodyCheckbox.checked = false;
       arImageInput.value = ''; existingImageUrl = ''; hotspotsData = [];
       previewImgEl.removeAttribute('src'); editorWrap.style.display = 'none';
       currentImgHint.innerText = '目前無使用中的圖片';
@@ -739,7 +737,16 @@
       new THREE.TextureLoader().load(imgUrl, (tex) => {
         const scale = Number(document.getElementById('img-scale').value || 1.0);
         const h = 0.65 * scale; const w = h * currentImageAspect;
-        previewImgMesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide, opacity: imgHideBodyCheckbox.checked ? 0.3 : 1.0 }));
+        const op = Number(previewImgOpacityIn.value);
+        const onTop = previewImgTopIn.checked;
+
+        previewImgMesh = new THREE.Mesh(
+          new THREE.PlaneGeometry(w, h),
+          new THREE.MeshBasicMaterial({
+            map: tex, transparent: true, side: THREE.DoubleSide, opacity: op, depthTest: !onTop
+          })
+        );
+        previewImgMesh.renderOrder = onTop ? 999 : 15;
         previewImgGroup.add(previewImgMesh);
       });
     }
@@ -807,7 +814,7 @@
 
       if (!cfg) {
         document.getElementById('project-name-input').value = projId ? `產品專案 ${projId}` : '';
-        document.getElementById('banner-enabled').checked = true; document.getElementById('redirect-url').value = 'https://example.com'; document.getElementById('banner-text').value = '👉 點擊指定點位開啟連結！'; document.getElementById('banner-y').value = 0.65;
+        document.getElementById('banner-enabled').checked = true; document.getElementById('redirect-url').value = 'https://example.com'; document.getElementById('banner-text').value = '👉 點擊圖片點位開啟連結！'; document.getElementById('banner-y').value = 0.65;
         updateBannerPreview(); videoLayers.push(createVideoLayerObject({ px: 0, py: 0 })); renderVideoCardsUI(); renderModelCardsUI(); return;
       }
 
