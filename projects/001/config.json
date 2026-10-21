@@ -1,0 +1,57 @@
+{
+  "projectId": "001",
+  "projectName": "產品專案 001",
+  "bannerEnabled": false,
+  "redirectUrl": "https://example.com",
+  "bannerText": "👉 點擊圖片點位開啟連結！",
+  "bannerPosY": 0.65,
+  "videos": [],
+  "models": [
+    {
+      "id": "m_1792604201361_992",
+      "enabled": true,
+      "url": "./models/model_m_1792604201361_992.glb",
+      "px": -0.05,
+      "py": 0,
+      "pz": 0.15,
+      "scale": 1.75,
+      "rx": 0,
+      "ry": 0,
+      "rz": 0,
+      "autoRotate": false
+    }
+  ],
+  "imageLayer": {
+    "enabled": true,
+    "hideBody": true,
+    "url": "./images/ar_overlay.png",
+    "px": 0,
+    "py": 0,
+    "pz": 0.18,
+    "scale": 2,
+    "ry": 0,
+    "rz": 0,
+    "hotspots": [
+      {
+        "id": 1792604294030,
+        "label": "點位 1",
+        "uvX": 0.616,
+        "uvY": 0.438,
+        "radius": 0.1,
+        "holdDuration": 1,
+        "url": "https://inff.cc/",
+        "longUrl": "https://home.gamer.com.tw/artwork.php?sn=5799647"
+      },
+      {
+        "id": 1792604331899,
+        "label": "點位 2",
+        "uvX": 0.4892,
+        "uvY": 0.4418,
+        "radius": 0.07,
+        "holdDuration": 1,
+        "url": "https://google.com",
+        "longUrl": "https://suno.com/onboarding?redirect_url=https%3A%2F%2Fsuno.com%2Fcreate%3Fsignup_source%3Dsplashpage%26referrer%3D%252F%26pre_signup_origin%3Dhttps%253A%252F%252Fsuno.com%26redirected_from%3Dsignup"
+      }
+    ]
+  }
+}
