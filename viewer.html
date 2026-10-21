@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <!-- 防快取標籤 -->
+  <!-- 防快取 Meta 標籤：確保手機端每次開啟皆載入最新設定 -->
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>AR 觀看端</title>
 
-  <!-- 官方同源模組映射 (Three.js r160 + MindAR 1.2.5) -->
+  <!-- 官方同源模組映射 (Three.js r160 + GLTFLoader + Meshopt + MindAR 1.2.5) -->
   <script type="importmap">
   {
     "imports": {
@@ -21,16 +21,24 @@
   </script>
 
   <style>
-    * { box-sizing: border-box; }
+    * {
+      box-sizing: border-box;
+    }
+
     html, body {
-      margin: 0; padding: 0; width: 100%; height: 100%;
-      overflow: hidden; background: transparent !important;
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: transparent !important;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       touch-action: manipulation;
       user-select: none;
       -webkit-user-select: none;
     }
 
+    /* MindAR 主容器：嚴格維持原生尺寸計算，確保相機與 3D 畫布 1:1 對齊 */
     #ar-container {
       position: relative;
       width: 100vw;
@@ -43,16 +51,19 @@
       z-index: 1 !important;
       pointer-events: none;
     }
+
     #ar-container canvas {
       z-index: 2 !important;
       pointer-events: none; /* 畫布本身不觸發連結，僅限透明點位層可點擊 */
     }
 
-    /* 3D 轉 2D 僅限座標點位的原生透明連結層 */
+    /* 3D 轉 2D 僅限座標點位的原生透明連結覆蓋層 */
     #ar-link-layer {
       position: fixed;
-      top: 0; left: 0;
-      width: 100vw; height: 100vh;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
       pointer-events: none;
       z-index: 50;
       overflow: hidden;
@@ -66,60 +77,129 @@
       cursor: pointer;
       text-decoration: none;
       -webkit-tap-highlight-color: transparent;
-       -webkit-touch-callout: none; /* 防止手機長按彈出系統選單，確保長按滑順觸發 */
+      -webkit-touch-callout: none; /* 防止手機長按彈出系統選單 */
       user-select: none;
       -webkit-user-select: none;
     }
 
-    /* 隱藏預載影片池 */
+    /* 隱藏預載影片池 (確保行動端硬體解碼器穩定運作) */
     #video-preload-pool {
-      position: fixed; bottom: 0; right: 0;
-      width: 1px; height: 1px; opacity: 0.01;
-      pointer-events: none; z-index: -1;
+      position: fixed;
+      bottom: 0;
+      right: 0;
+      width: 1px;
+      height: 1px;
+      opacity: 0.01;
+      pointer-events: none;
+      z-index: -1;
     }
 
     /* 頂部簡潔追蹤狀態燈 */
     #tracker-hud {
-      position: fixed; top: 15px; left: 50%; transform: translateX(-50%);
-      z-index: 1000; padding: 8px 18px; border-radius: 20px;
-      font-size: 14px; font-weight: bold; color: white;
-      background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(4px);
-      display: none; pointer-events: none; white-space: nowrap;
+      position: fixed;
+      top: 15px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1000;
+      padding: 8px 18px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: bold;
+      color: white;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(4px);
+      display: none;
+      pointer-events: none;
+      white-space: nowrap;
       transition: background 0.2s;
+    }
+
+    /* 3D 模型串流下載進度提示條 */
+    #model-progress-bar {
+      position: fixed;
+      top: 58px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1000;
+      padding: 6px 16px;
+      border-radius: 16px;
+      font-size: 12px;
+      font-weight: bold;
+      color: #38bdf8;
+      background: rgba(15, 23, 42, 0.88);
+      border: 1px solid rgba(56, 189, 248, 0.5);
+      display: none;
+      pointer-events: none;
+      white-space: nowrap;
     }
 
     /* 啟動遮罩 */
     #overlay {
-      position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-      background: rgba(15, 23, 42, 0.95); display: flex; flex-direction: column;
-      justify-content: center; align-items: center; z-index: 2000; color: white;
-      text-align: center; padding: 20px;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(15, 23, 42, 0.95);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 2000;
+      color: white;
+      text-align: center;
+      padding: 20px;
     }
 
     #project-badge {
-      font-size: 12px; color: #38bdf8; background: rgba(56, 189, 248, 0.15);
-      border: 1px solid rgba(56, 189, 248, 0.4); padding: 4px 12px;
-      border-radius: 12px; margin-bottom: 10px;
+      font-size: 12px;
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.15);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      padding: 4px 12px;
+      border-radius: 12px;
+      margin-bottom: 10px;
     }
 
     #start-btn {
-      padding: 15px 36px; font-size: 18px; border: none; border-radius: 30px;
-      background: #007aff; color: white; cursor: pointer; font-weight: bold;
+      padding: 15px 36px;
+      font-size: 18px;
+      border: none;
+      border-radius: 30px;
+      background: #007aff;
+      color: white;
+      cursor: pointer;
+      font-weight: bold;
       box-shadow: 0 4px 15px rgba(0, 122, 255, 0.4);
     }
-    #start-btn:disabled { background: #555; box-shadow: none; }
+
+    #start-btn:disabled {
+      background: #555;
+      box-shadow: none;
+    }
 
     #status-msg {
-      margin-top: 15px; font-size: 14px; line-height: 1.5;
-      white-space: pre-wrap; max-width: 90%; color: #94a3b8;
+      margin-top: 15px;
+      font-size: 14px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      max-width: 90%;
+      color: #94a3b8;
     }
-    .text-error { color: #ff4d4f !important; font-weight: bold; }
+
+    .text-error {
+      color: #ff4d4f !important;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
 
+  <!-- 頂部狀態與 3D 模型進度顯示 -->
   <div id="tracker-hud">🟡 正在尋找目標圖卡...</div>
+  <div id="model-progress-bar">⏳ 正在載入 3D 模型... 0%</div>
 
+  <!-- 啟動前引導遮罩 -->
   <div id="overlay">
     <div id="project-badge">專案載入中...</div>
     <h2 id="project-title">WebAR 互動體驗</h2>
@@ -127,8 +207,8 @@
     <div id="status-msg">正在檢查環境與載入設定檔...</div>
   </div>
 
+  <!-- AR 渲染容器與透明點位連結層 -->
   <div id="ar-container"></div>
-  <!-- 僅放置座標點位的原生透明 <a> 連結層 -->
   <div id="ar-link-layer"></div>
   <div id="video-preload-pool"></div>
 
@@ -137,31 +217,42 @@
     const overlay = document.getElementById('overlay');
     const statusMsg = document.getElementById('status-msg');
     const hud = document.getElementById('tracker-hud');
+    const modelProgressBar = document.getElementById('model-progress-bar');
     const preloadPool = document.getElementById('video-preload-pool');
     const arLinkLayer = document.getElementById('ar-link-layer');
     const projectBadge = document.getElementById('project-badge');
     const projectTitleEl = document.getElementById('project-title');
 
+    // =========================================================
+    // 1. 解析網址參數 ?id=專案代號 (支援多產品專案隔離與根目錄向下相容)
+    // =========================================================
     const urlParams = new URLSearchParams(window.location.search);
     const currentProjectId = (urlParams.get('id') || '').trim();
     projectBadge.innerText = currentProjectId ? `產品專案：${currentProjectId}` : `預設專案 (Root)`;
 
     function resolveProjectAssetUrl(rawPath) {
       if (!rawPath) return '';
-      if (/^https?:\/\//i.test(rawPath)) return rawPath;
-      const clean = rawPath.replace(/^\.\//, '').replace(/^\/+/, '');
+      const trimmed = rawPath.trim();
+      if (/^https?:\/\//i.test(trimmed)) return trimmed;
+      const clean = trimmed.replace(/^\.\//, '').replace(/^\/+/, '');
       if (!currentProjectId) return `./${clean}`;
       if (clean.startsWith(`projects/${currentProjectId}/`)) return `./${clean}`;
       return `./projects/${currentProjectId}/${clean}`;
     }
 
     let THREE = null;
+    let GLTFLoader = null;
+    let DRACOLoader = null;
+    let MeshoptDecoder = null;
     let MindARThree = null;
     let config = null;
+
     const validVideoItems = [];
+    const validModelConfigs = [];
     let validImageLayer = null;
     let isTargetLocked = false;
 
+    // 網址正規化：自動補齊 https://
     function normalizeUrl(rawUrl) {
       if (!rawUrl || typeof rawUrl !== 'string') return '';
       const trimmed = rawUrl.trim();
@@ -170,6 +261,7 @@
       return 'https://' + trimmed;
     }
 
+    // 檢查是否於 LINE / FB 內建瀏覽器開啟
     function checkInAppBrowser() {
       const ua = navigator.userAgent || navigator.vendor || window.opera;
       if (ua.indexOf('Line') > -1 || ua.indexOf('FBAN') > -1 || ua.indexOf('FBAV') > -1) {
@@ -181,8 +273,10 @@
       return false;
     }
 
+    // 檢查遠端媒體資產是否存在
     async function checkAssetExists(url) {
       if (!url) return false;
+      if (/^https?:\/\//i.test(url)) return true;
       try {
         const res = await fetch(`${url}?t=${Date.now()}`, { method: 'HEAD' });
         return res.ok;
@@ -223,14 +317,13 @@
     }
 
     // =========================================================
-    // 核心功能：建立具備「短按 / 長按持久度分流」的原生透明 <a target="_blank"> 點位
+    // 2. 建立具備「短按 / 長按持久度分流」的原生透明 <a target="_blank"> 點位
     // =========================================================
     const trackedDomLinks = [];
 
     function registerHotspotDomLink(mesh, spotConfig, zIndexVal) {
       const shortUrl = normalizeUrl(spotConfig.url);
       const longUrl = normalizeUrl(spotConfig.longUrl);
-      // 若短按與長按都沒填網址，則不建立連結
       if (!shortUrl && !longUrl) return;
 
       const holdMs = Math.max(100, Number(spotConfig.holdDuration ?? 0.8) * 1000);
@@ -242,7 +335,7 @@
       a.rel = 'noopener noreferrer';
       a.style.zIndex = String(zIndexVal);
 
-      // 阻止手機長按時彈出預設預覽選單，確保放開手指時順利觸發 click 開新分頁
+      // 防止手機長按時跳出系統預設選單，確保放開時能觸發原生新分頁開啟
       a.addEventListener('contextmenu', (e) => e.preventDefault());
       a.addEventListener('dragstart', (e) => e.preventDefault());
 
@@ -253,16 +346,14 @@
       function onPressStart() {
         pressStartTime = performance.now();
         isLongPressTriggered = false;
-        // 按下初期預設指向短按連結 (若無短按連結則指向長按連結)
         a.href = shortUrl || longUrl;
 
         if (holdTimer) clearTimeout(holdTimer);
 
-        // 若有設定長按連結，啟動持久度計時器
         if (longUrl) {
           holdTimer = setTimeout(() => {
             isLongPressTriggered = true;
-            a.href = longUrl; // 按壓時間達標！立即將原生 <a> 的目標切換為長按連結
+            a.href = longUrl;
             hud.style.background = "rgba(147, 51, 234, 0.95)";
             hud.innerHTML = `🟣 長按已達標 (${(holdMs / 1000).toFixed(1)}s)！放開開啟長按連結`;
           }, holdMs);
@@ -295,7 +386,6 @@
           hud.style.background = "rgba(0, 122, 255, 0.95)";
           hud.innerHTML = "🔗 已於新分頁開啟【短按連結】";
         } else {
-          // 若僅設定長按連結但使用者只短按（未達持久度），則取消跳轉並提示需長按
           e.preventDefault();
           hud.style.background = "rgba(245, 158, 11, 0.95)";
           hud.innerHTML = `⏳ 請長按 ${(holdMs / 1000).toFixed(1)} 秒以開啟此點位連結`;
@@ -310,6 +400,9 @@
       trackedDomLinks.push({ mesh, anchorEl: a });
     }
 
+    // =========================================================
+    // 3. 系統初始化：載入設定檔、同源 3D 引擎與雙壓縮解碼器
+    // =========================================================
     async function init() {
       if (checkInAppBrowser()) return;
 
@@ -329,16 +422,29 @@
 
         statusMsg.innerText = "⏳ 2/3 正在載入 3D 與 AR 核心引擎...";
         THREE = await import('three');
+        const gltfMod = await import('three/addons/loaders/GLTFLoader.js');
+        const dracoMod = await import('three/addons/loaders/DRACOLoader.js');
+        const meshoptMod = await import('three/addons/libs/meshopt_decoder.module.js');
         const mindarModule = await import('mindar-image-three');
+
+        GLTFLoader = gltfMod.GLTFLoader;
+        DRACOLoader = dracoMod.DRACOLoader;
+        MeshoptDecoder = meshoptMod.MeshoptDecoder;
         MindARThree = mindarModule.MindARThree;
+
+        // 確保 Meshopt WebAssembly 解碼器完全就緒 (針對 glTF-Transform 壓縮之 .glb)
+        if (MeshoptDecoder && MeshoptDecoder.ready) {
+          try { await MeshoptDecoder.ready; } catch (e) {}
+        }
 
         if (THREE.ColorManagement) {
           THREE.ColorManagement.enabled = false;
         }
 
-        statusMsg.innerText = "⏳ 3/3 正在檢查已設定的媒體資產...";
+        statusMsg.innerText = "⏳ 3/3 正在檢查已設定的媒體與 3D 資產...";
         preloadPool.innerHTML = '';
 
+        // A. 檢查並預載去背影片資產
         if (config.videos && Array.isArray(config.videos)) {
           for (let i = 0; i < config.videos.length; i++) {
             const vConf = config.videos[i];
@@ -371,6 +477,21 @@
           }
         }
 
+        // B. 檢查 3D 模型 (.glb) 資產
+        if (config.models && Array.isArray(config.models)) {
+          for (let i = 0; i < config.models.length; i++) {
+            const mConf = config.models[i];
+            if (!mConf || mConf.enabled === false || !mConf.url) continue;
+
+            const resolvedModelUrl = resolveProjectAssetUrl(mConf.url);
+            const exists = await checkAssetExists(resolvedModelUrl);
+            if (exists) {
+              validModelConfigs.push({ ...mConf, resolvedUrl: resolvedModelUrl });
+            }
+          }
+        }
+
+        // C. 檢查互動圖片與點位資產
         if (config.imageLayer && config.imageLayer.enabled && config.imageLayer.url) {
           const resolvedImgUrl = resolveProjectAssetUrl(config.imageLayer.url);
           const imgExists = await checkAssetExists(resolvedImgUrl);
@@ -380,8 +501,9 @@
         }
 
         const hsCount = (validImageLayer && Array.isArray(validImageLayer.hotspots)) ? validImageLayer.hotspots.length : 0;
-        const imgInfo = validImageLayer ? ` + 1 張互動圖片(${hsCount}個點位)` : "";
-        statusMsg.innerText = `✅ 準備就緒（已載入 ${validVideoItems.length} 支影片${imgInfo}）\n請將鏡頭對準實體圖卡`;
+        const modelInfo = validModelConfigs.length > 0 ? ` + ${validModelConfigs.length} 個 3D 模型` : "";
+        const imgInfo = validImageLayer ? ` + ${hsCount} 個互動點位` : "";
+        statusMsg.innerText = `✅ 準備就緒（${validVideoItems.length} 支影片${modelInfo}${imgInfo}）\n請將鏡頭對準實體圖卡`;
         startBtn.innerText = "點擊啟動 AR 鏡頭";
         startBtn.disabled = false;
         startBtn.onclick = startAR;
@@ -394,10 +516,14 @@
       }
     }
 
+    // =========================================================
+    // 4. 啟動 AR 相機、掛載 3D 場景與點位投影迴圈
+    // =========================================================
     async function startAR() {
       startBtn.disabled = true;
       startBtn.innerText = "相機啟動中...";
 
+      // 手勢第一時間同步喚醒所有影片，取得行動端硬體播放授權
       validVideoItems.forEach(item => {
         item.element.play().catch(e => console.warn(`影片 ${item.index} 初始喚醒:`, e));
       });
@@ -419,11 +545,30 @@
 
         const { renderer, scene, camera } = mindarThree;
         renderer.setClearColor(0x000000, 0);
+        // 限制高解析度手機螢幕之 PixelRatio 上限為 2，保護 GPU VRAM 記憶體
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+
+        // =========================================================
+        // 4.0 配置 3D 模型專用立體光影系統 (含半球環境補光，防止 PBR 金屬材質全黑)
+        // =========================================================
+        const ambientLight = new THREE.AmbientLight(0xffffff, 2.2);
+        scene.add(ambientLight);
+
+        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x666666, 2.0);
+        scene.add(hemiLight);
+
+        const mainDirLight = new THREE.DirectionalLight(0xffffff, 2.5);
+        mainDirLight.position.set(2, 4, 5);
+        scene.add(mainDirLight);
+
+        const fillDirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+        fillDirLight.position.set(-2, -2, 3);
+        scene.add(fillDirLight);
 
         const anchor = mindarThree.addAnchor(0);
 
         // =========================================================
-        // A. 浮空文字看板 (純視覺展示，點擊不啟動連結)
+        // 4.A 浮空文字看板 (純視覺展示，點擊不啟動連結)
         // =========================================================
         if (config.bannerEnabled !== false && config.bannerText && config.bannerText.trim() !== "") {
           const bannerTexture = createCleanBannerTexture(config.bannerText);
@@ -444,7 +589,7 @@
         }
 
         // =========================================================
-        // B. 零殘影去背影片平面 (純視覺展示，點擊不啟動連結)
+        // 4.B 零殘影去背影片平面 (純視覺展示，點擊不啟動連結)
         // =========================================================
         const vShader = `
           varying vec2 vUv;
@@ -521,7 +666,140 @@
         });
 
         // =========================================================
-        // C. AR 互動圖片與「唯一可觸發連結的座標點位感應區」
+        // 4.C 3D 模型 (.glb) 載入：含下載進度條 + Meshopt 解碼 + 量化網格防剔除 + 材質防黑
+        // =========================================================
+        const activeModelObjects = [];
+        if (validModelConfigs.length > 0) {
+          const gltfLoader = new GLTFLoader();
+          gltfLoader.setCrossOrigin('anonymous');
+
+          const dracoLoader = new DRACOLoader();
+          dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+          gltfLoader.setDRACOLoader(dracoLoader);
+
+          if (MeshoptDecoder) {
+            gltfLoader.setMeshoptDecoder(MeshoptDecoder);
+          }
+
+          let loadedModelsCount = 0;
+          modelProgressBar.style.display = 'block';
+
+          validModelConfigs.forEach((mConf) => {
+            const wrapperGroup = new THREE.Group();
+            const mx = Number(mConf.px || 0);
+            const my = Number(mConf.py || 0);
+            const mz = Number(mConf.pz ?? 0.15);
+            const rx = THREE.MathUtils.degToRad(Number(mConf.rx || 0));
+            const ry = THREE.MathUtils.degToRad(Number(mConf.ry || 0));
+            const rz = THREE.MathUtils.degToRad(Number(mConf.rz || 0));
+            const userScale = Number(mConf.scale || 1.0);
+
+            wrapperGroup.position.set(mx, my, mz);
+            wrapperGroup.rotation.set(rx, ry, rz);
+            anchor.group.add(wrapperGroup);
+
+            const encodedUrl = `${encodeURI(mConf.resolvedUrl)}?t=${Date.now()}`;
+
+            gltfLoader.load(
+              encodedUrl,
+              (gltf) => {
+                const rawModel = gltf.scene || (gltf.scenes && gltf.scenes[0]);
+                if (!rawModel) return;
+
+                // 針對 KHR_mesh_quantization 與 PBR 金屬材質進行防消失與防黑處理
+                rawModel.traverse((child) => {
+                  if (child.isMesh) {
+                    child.frustumCulled = false; // 強制禁止視錐體剔除，防止量化網格消失
+                    if (child.geometry) {
+                      child.geometry.computeBoundingBox();
+                      child.geometry.computeBoundingSphere();
+                    }
+                    if (child.material) {
+                      const mats = Array.isArray(child.material) ? child.material : [child.material];
+                      mats.forEach(m => {
+                        m.side = THREE.DoubleSide;
+                        if (m.metalness !== undefined && m.metalness > 0.3) {
+                          m.metalness = 0.15;
+                        }
+                        if (m.roughness !== undefined && m.roughness < 0.25) {
+                          m.roughness = 0.55;
+                        }
+                        m.needsUpdate = true;
+                      });
+                    }
+                  }
+                });
+
+                // 計算真實邊界框並自動置中與標準化大小 (0.65 單位)
+                rawModel.updateMatrixWorld(true);
+                const box = new THREE.Box3().setFromObject(rawModel);
+                const size = new THREE.Vector3();
+                const center = new THREE.Vector3();
+                box.getSize(size);
+                box.getCenter(center);
+
+                let maxDim = Math.max(size.x, size.y, size.z);
+                if (!isFinite(maxDim) || maxDim <= 0.0001) maxDim = 1.0;
+                const normFactor = 0.65 / maxDim;
+
+                rawModel.position.set(
+                  -center.x * normFactor,
+                  -center.y * normFactor,
+                  -center.z * normFactor
+                );
+                rawModel.scale.setScalar(normFactor);
+
+                const scaleHolder = new THREE.Group();
+                scaleHolder.scale.setScalar(userScale);
+                scaleHolder.add(rawModel);
+                wrapperGroup.add(scaleHolder);
+
+                let mixer = null;
+                if (gltf.animations && gltf.animations.length > 0) {
+                  mixer = new THREE.AnimationMixer(rawModel);
+                  gltf.animations.forEach((clip) => {
+                    mixer.clipAction(clip).play();
+                  });
+                }
+
+                activeModelObjects.push({
+                  wrapper: wrapperGroup,
+                  mixer: mixer,
+                  autoRotate: !!mConf.autoRotate,
+                  baseRY: ry
+                });
+
+                loadedModelsCount++;
+                if (loadedModelsCount >= validModelConfigs.length) {
+                  modelProgressBar.style.color = '#10b981';
+                  modelProgressBar.innerText = '✅ 3D 模型載入完成！';
+                  setTimeout(() => {
+                    modelProgressBar.style.display = 'none';
+                  }, 1800);
+                }
+              },
+              (xhr) => {
+                const loadedMB = (xhr.loaded / (1024 * 1024)).toFixed(1);
+                if (xhr.lengthComputable && xhr.total > 0) {
+                  const totalMB = (xhr.total / (1024 * 1024)).toFixed(1);
+                  const pct = Math.min(100, Math.round((xhr.loaded / xhr.total) * 100));
+                  modelProgressBar.innerText = `⏳ 正在載入 3D 模型... ${pct}% (${loadedMB}MB / ${totalMB}MB)`;
+                } else {
+                  modelProgressBar.innerText = `⏳ 正在載入 3D 模型... 已接收 ${loadedMB} MB`;
+                }
+              },
+              (err) => {
+                console.warn("3D 模型載入失敗:", mConf.resolvedUrl, err);
+                modelProgressBar.style.color = '#ff4d4f';
+                modelProgressBar.innerText = `⚠️ 3D 模型載入失敗`;
+              }
+            );
+          });
+        }
+
+        // =========================================================
+        // 4.D AR 互動圖片與「唯一可觸發連結的座標點位感應區」
+        //     (支援 hideBody：將圖片本體設為 100% 隱形，作為 3D 模型的透明碰撞板)
         // =========================================================
         if (validImageLayer) {
           const imgGroup = new THREE.Group();
@@ -531,6 +809,7 @@
           const imgRY = THREE.MathUtils.degToRad(Number(validImageLayer.ry || 0));
           const imgRZ = THREE.MathUtils.degToRad(Number(validImageLayer.rz || 0));
           const imgScale = Number(validImageLayer.scale || 1.0);
+          const isBodyHidden = !!validImageLayer.hideBody;
 
           imgGroup.position.set(imgX, imgY, imgZ);
           imgGroup.rotation.set(0, imgRY, imgRZ);
@@ -549,22 +828,20 @@
             const imgMat = new THREE.MeshBasicMaterial({
               map: imgTex,
               transparent: true,
+              opacity: isBodyHidden ? 0.0 : 1.0, // 若勾選隱藏本體，手機端 100% 透明隱形
               side: THREE.DoubleSide,
               depthWrite: false
             });
             const imgMesh = new THREE.Mesh(new THREE.PlaneGeometry(planeW, planeH), imgMat);
             imgMesh.renderOrder = 15;
             imgGroup.add(imgMesh);
-            // 注意：圖片本體不註冊任何連結，確保點空白處不會啟動連結！
 
-            // 僅針對設定的座標點位 (hotspots) 依據後台設定的大小 (radius) 建立透明感應區
             const hotspots = Array.isArray(validImageLayer.hotspots) ? validImageLayer.hotspots : [];
             const minDim = Math.min(planeW, planeH);
 
             hotspots.forEach((spot, sIdx) => {
               const uvX = Number(spot.uvX ?? 0.5);
               const uvY = Number(spot.uvY ?? 0.5);
-              // 讀取後台設定的點位大小比例 (預設 0.15 即 15%)
               const radiusRatio = Number(spot.radius ?? 0.15);
 
               const localX = (uvX - 0.5) * planeW;
@@ -573,7 +850,7 @@
               const hsMat = new THREE.MeshBasicMaterial({
                 color: 0xffffff,
                 transparent: true,
-                opacity: 0.0, // 觀看端 100% 透明無標記
+                opacity: 0.0,
                 side: THREE.DoubleSide,
                 depthWrite: false
               });
@@ -593,7 +870,7 @@
         }
 
         // =========================================================
-        // D. 追蹤狀態事件
+        // 4.E 追蹤狀態事件
         // =========================================================
         let lastLockedTime = 0;
 
@@ -619,7 +896,7 @@
         hud.style.display = 'block';
 
         // =========================================================
-        // E. 螢幕旋轉與「從新分頁返回時」自動喚醒相機機制
+        // 4.F 螢幕旋轉與「從新分頁返回時」自動喚醒相機機制
         // =========================================================
         window.addEventListener('orientationchange', () => {
           setTimeout(() => window.dispatchEvent(new Event('resize')), 150);
@@ -647,16 +924,19 @@
         window.addEventListener('pageshow', resumeARSessionOnReturn);
 
         // =========================================================
-        // F. 渲染迴圈：更新影片 + 實時將 3D 點位範圍投影至 2D 原生 <a target="_blank">
+        // 4.G 渲染迴圈：更新影片 + 更新 3D 模型動畫 + 投影點位連結
         // =========================================================
+        const clock = new THREE.Clock();
         const cornerVec = new THREE.Vector3();
 
         renderer.setAnimationLoop(() => {
+          const delta = clock.getDelta();
           const now = performance.now();
           if (isTargetLocked) {
             lastLockedTime = now;
           }
 
+          // 1. 巡檢去背影片無限循環播放與比例校正
           activeVideoObjects.forEach(vo => {
             const v = vo.video;
 
@@ -681,8 +961,19 @@
             }
           });
 
+          // 2. 更新 3D 模型內建骨骼動畫與自動緩慢自轉
+          activeModelObjects.forEach(mo => {
+            if (mo.mixer) {
+              mo.mixer.update(delta);
+            }
+            if (mo.autoRotate) {
+              mo.wrapper.rotation.y += delta * 1.2;
+            }
+          });
+
           renderer.render(scene, camera);
 
+          // 3. 實時將 3D 點位範圍投影至 2D 螢幕座標，驅動原生 <a target="_blank">
           const isLinkActive = isTargetLocked || (now - lastLockedTime < 1500);
           if (!isLinkActive) {
             for (let i = 0; i < trackedDomLinks.length; i++) {
