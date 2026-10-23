@@ -1,0 +1,33 @@
+{
+  "projectId": "739",
+  "projectName": "產品專案 739",
+  "bannerEnabled": false,
+  "redirectUrl": "https://example.com",
+  "bannerText": "嘗試點擊畫面上人物",
+  "bannerPosY": 0.65,
+  "videos": [],
+  "models": [],
+  "imageLayer": {
+    "enabled": true,
+    "hideBody": false,
+    "url": "./images/ar_overlay.png",
+    "px": 0,
+    "py": 0,
+    "pz": 0.1,
+    "scale": 1.5,
+    "ry": 0,
+    "rz": 0,
+    "hotspots": [
+      {
+        "id": 1792726919913,
+        "label": "點位 1",
+        "uvX": 0.2821,
+        "uvY": 0.2235,
+        "radius": 0.5,
+        "holdDuration": 0.8,
+        "url": "https://www.threads.com/share/_eyyAKDQL/",
+        "longUrl": ""
+      }
+    ]
+  }
+}
