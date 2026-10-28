@@ -10,7 +10,7 @@
     {
       "id": "m_1792604201361_992",
       "enabled": true,
-      "url": "./models/model_m_1792604201361_992.glb",
+      "url": "./projects/001/models/model_m_1792604201361_992.glb",
       "px": -0.05,
       "py": 0,
       "pz": 0.15,
@@ -24,7 +24,7 @@
   "imageLayer": {
     "enabled": true,
     "hideBody": true,
-    "url": "./images/ar_overlay.png",
+    "url": "./projects/001/images/ar_overlay.png",
     "px": 0,
     "py": 0,
     "pz": 0.18,
